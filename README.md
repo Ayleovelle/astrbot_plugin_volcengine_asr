@@ -20,6 +20,8 @@
 ---
 
 > 🎤 一个为 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 设计的语音转文字插件，基于**火山引擎豆包语音「大模型录音文件极速版识别 API」**，把 QQ 语音消息自动转成文本并以「用户输入」的形式喂给 LLM，让你的 Bot 真正「听得懂」语音。
+>
+> 🛠️ 本项目为 Vibe Coding 产物。
 
 > 💬 虽然已经有很多类似的插件了，但是我的 AstrBot 是以云应用的方式部署在 VPS 上 = =。由于云应用的特殊性我没找到独立安装 ffmpeg 的方式，所以将其集成在插件里面 = =。不需要集成 ffmpeg 的版本后面再发。
 
@@ -381,5 +383,7 @@ third_party_licenses/imageio-ffmpeg.LICENSE
 **🎤 如果这个插件对你有帮助，欢迎点一个 ⭐ Star ⭐**
 
 让 AstrBot 真正「听得懂」你的每一条语音 ✨
+
+*Made with Ayleovelle & DeepSeek & Claude & GPT*
 
 </div>
