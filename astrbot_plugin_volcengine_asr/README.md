@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
-  <img src="https://img.shields.io/badge/Version-1.4.1-brightgreen.svg" alt="Version 1.4.1">
+  <img src="https://img.shields.io/badge/Version-1.4.2-brightgreen.svg" alt="Version 1.4.2">
 </p>
 
 <p align="center">
@@ -43,7 +43,7 @@
 
 > [!NOTE]
 > **🧩 当前版本**
-> - 插件版本：`1.4.1`
+> - 插件版本：`1.4.2`
 > - 适配 AstrBot：`>=4.16,<5`
 > - 已处理 AstrBot `v4.24.1` 的 `StarMetadata.pages` 字段缺失兼容问题
 > - 已内置 Linux x86_64/amd64 版 `ffmpeg`，适合无法在 VPS 或 Docker 容器内单独安装 `ffmpeg` 的场景
@@ -146,7 +146,7 @@ third_party_licenses/imageio-ffmpeg.LICENSE
 配置完成后发送一条 QQ 语音，插件会把当前用户消息改写为：
 
 ```text
-这里是识别结果[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，回复时不要考虑括号内内容]
+这里是识别结果[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，请不要告诉用户自己是通过转文字的方式听到的，回复时不要考虑括号内内容]
 ```
 
 随后 AstrBot 的默认 LLM 流程会基于这段用户输入生成回复。
@@ -248,7 +248,7 @@ bin/linux-x86_64/ffmpeg
 ### 默认注入模板（推荐）
 
 ```text
-<text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，回复时不要考虑括号内内容]
+<text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，请不要告诉用户自己是通过转文字的方式听到的，回复时不要考虑括号内内容]
 ```
 
 > 此模板会引导 LLM **优先使用语音回复**，推荐配合 [`astrbot_plugin_clonetts`](https://github.com/Radiant303/astrbot_plugin_clonetts) 等 TTS 插件使用，实现「语音进 → 语音出」的自然交互体验。

@@ -16,7 +16,6 @@ _pack.py
 /main.py
 /metadata.yaml
 /requirements.txt
-/README.md
 
 # Built release artifact (published via GitHub Releases)
 astrbot_plugin_volcengine_asr.zip

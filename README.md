@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
-  <img src="https://img.shields.io/badge/Version-1.4.1-brightgreen.svg" alt="Version 1.4.1">
+  <img src="https://img.shields.io/badge/Version-1.4.2-brightgreen.svg" alt="Version 1.4.2">
 </p>
 
 <p align="center">
@@ -39,11 +39,11 @@
 ---
 
 > [!TIP]
-> **🎙️ 推荐搭配**：本插件默认提示词会**引导 LLM 优先使用语音回复**。若希望实现「语音进 → 语音出」的自然对话体验，建议配合 [`astrbot_plugin_clonetts`](https://github.com/) 等 TTS 插件一起使用。
+> **🎙️ 推荐搭配**：本插件默认提示词会**引导 LLM 优先使用语音回复**。若希望实现「语音进 → 语音出」的自然对话体验，建议配合 [`astrbot_plugin_clonetts`](https://github.com/Radiant303/astrbot_plugin_clonetts) 等 TTS 插件一起使用。
 
 > [!NOTE]
 > **🧩 当前版本**
-> - 插件版本：`1.4.1`
+> - 插件版本：`1.4.2`
 > - 适配 AstrBot：`>=4.16,<5`
 > - 已处理 AstrBot `v4.24.1` 的 `StarMetadata.pages` 字段缺失兼容问题
 > - 已内置 Linux x86_64/amd64 版 `ffmpeg`，适合无法在 VPS 或 Docker 容器内单独安装 `ffmpeg` 的场景
@@ -83,14 +83,10 @@
 
 ### 方式一：WebUI 上传压缩包（推荐）
 
-在 AstrBot WebUI **插件页面 → 从文件安装**，上传：
-
-```text
-astrbot_plugin_volcengine_asr.zip
-```
+从 [**GitHub Releases**](https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr/releases/latest) 下载最新的 `astrbot_plugin_volcengine_asr.zip`，在 AstrBot WebUI **插件页面 → 从文件安装** 上传即可。
 
 > [!IMPORTANT]
-> 压缩包内**顶层目录**必须为 `astrbot_plugin_volcengine_asr/`，而不是直接以 `main.py` 开头，否则会报 `Not a directory` 错误。
+> 压缩包内**顶层目录**必须为 `astrbot_plugin_volcengine_asr/`，而不是直接以 `main.py` 开头，否则会报 `Not a directory` 错误。Releases 中发布的 zip 已满足此结构。
 
 ### 方式二：手动放置目录
 
@@ -108,9 +104,14 @@ metadata.yaml
 _conf_schema.json
 requirements.txt
 README.md
-bin/linux-x86_64/ffmpeg
+bin/linux-x86_64/ffmpeg                       # 从 Releases 下载或自行放置
 third_party_licenses/imageio-ffmpeg.LICENSE
 ```
+
+> [!NOTE]
+> 仓库中**不再直接携带** `bin/linux-x86_64/ffmpeg` 二进制（76MB，超过 GitHub 50MB 推荐值）。
+> - 推荐直接下载 Releases 中已打包好的 zip，解压即用。
+> - 若手动克隆仓库，可从 [`imageio-ffmpeg` wheel](https://pypi.org/project/imageio-ffmpeg/) 中提取，或复制系统 `ffmpeg` 到该位置，也可将 `ffmpeg_path` 指向任意可执行文件。
 
 安装后在 AstrBot WebUI 重载插件，或重启 AstrBot。`requirements.txt` 目前只依赖 `httpx`。
 
@@ -145,7 +146,7 @@ third_party_licenses/imageio-ffmpeg.LICENSE
 配置完成后发送一条 QQ 语音，插件会把当前用户消息改写为：
 
 ```text
-这里是识别结果[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，回复时不要考虑括号内内容]
+这里是识别结果[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，请不要告诉用户自己是通过转文字的方式听到的，回复时不要考虑括号内内容]
 ```
 
 随后 AstrBot 的默认 LLM 流程会基于这段用户输入生成回复。
@@ -247,10 +248,10 @@ bin/linux-x86_64/ffmpeg
 ### 默认注入模板（推荐）
 
 ```text
-<text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，回复时不要考虑括号内内容]
+<text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，请不要告诉用户自己是通过转文字的方式听到的，回复时不要考虑括号内内容]
 ```
 
-> 此模板会引导 LLM **优先使用语音回复**，推荐配合 [`astrbot_plugin_clonetts`](https://github.com/) 等 TTS 插件使用，实现「语音进 → 语音出」的自然交互体验。
+> 此模板会引导 LLM **优先使用语音回复**，推荐配合 [`astrbot_plugin_clonetts`](https://github.com/Radiant303/astrbot_plugin_clonetts) 等 TTS 插件使用，实现「语音进 → 语音出」的自然交互体验。
 
 ### 偏向文字回复的模板
 
