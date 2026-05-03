@@ -1,0 +1,135 @@
+{
+  "api_key": {
+    "description": "新版控制台 API Key",
+    "type": "string",
+    "default": "",
+    "hint": "填写后优先使用 X-Api-Key 鉴权。新版控制台通常只需要这一项。",
+    "obvious_hint": true
+  },
+  "app_key": {
+    "description": "旧版控制台 App Key",
+    "type": "string",
+    "default": "",
+    "hint": "仅旧版控制台需要。未填写 api_key 时，会和 access_key 一起用于鉴权。"
+  },
+  "access_key": {
+    "description": "旧版控制台 Access Key",
+    "type": "string",
+    "default": "",
+    "hint": "仅旧版控制台需要。未填写 api_key 时，会和 app_key 一起用于鉴权。"
+  },
+  "resource_id": {
+    "description": "火山引擎资源 ID",
+    "type": "string",
+    "default": "volc.bigasr.auc_turbo",
+    "hint": "大模型录音文件极速版固定为 volc.bigasr.auc_turbo，需在火山引擎侧开通权限。"
+  },
+  "endpoint": {
+    "description": "识别接口地址",
+    "type": "string",
+    "default": "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
+  },
+  "uid": {
+    "description": "用户标识 uid",
+    "type": "string",
+    "default": "",
+    "hint": "留空时自动使用 api_key/app_key 或 astrbot。"
+  },
+  "submit_mode": {
+    "description": "音频提交方式",
+    "type": "string",
+    "default": "base64",
+    "options": ["base64", "url"],
+    "hint": "base64 会由 AstrBot 所在机器下载语音后上传，适合 OneBot/NatCat。url 要求火山引擎公网可访问该 URL。"
+  },
+  "max_audio_mb": {
+    "description": "最大音频大小 MB",
+    "type": "int",
+    "default": 20,
+    "hint": "火山引擎接口上限为 100MB；Base64 上传建议保持 20MB 以内。"
+  },
+  "timeout_seconds": {
+    "description": "请求超时秒数",
+    "type": "int",
+    "default": 60
+  },
+  "enable_itn": {
+    "description": "启用数字规整",
+    "type": "bool",
+    "default": true
+  },
+  "enable_punc": {
+    "description": "启用标点",
+    "type": "bool",
+    "default": true
+  },
+  "enable_ddc": {
+    "description": "启用顺滑",
+    "type": "bool",
+    "default": true
+  },
+  "enable_speaker_info": {
+    "description": "启用说话人信息",
+    "type": "bool",
+    "default": false
+  },
+  "auto_recognize": {
+    "description": "自动识别语音消息",
+    "type": "bool",
+    "default": true
+  },
+  "enable_private": {
+    "description": "私聊启用",
+    "type": "bool",
+    "default": true
+  },
+  "enable_group": {
+    "description": "群聊启用",
+    "type": "bool",
+    "default": true
+  },
+  "only_when_at_or_wake": {
+    "description": "仅被唤醒或被 @ 时识别",
+    "type": "bool",
+    "default": false,
+    "hint": "群聊较吵时可打开，私聊通常不需要。"
+  },
+  "ignore_self": {
+    "description": "忽略机器人自己发送的消息",
+    "type": "bool",
+    "default": true
+  },
+  "stop_event_after_recognition": {
+    "description": "识别后阻止事件继续传播",
+    "type": "bool",
+    "default": true,
+    "hint": "打开后语音消息只转文字回复，不继续进入 AstrBot 后续 LLM/TTS 流程。"
+  },
+  "send_empty_result_message": {
+    "description": "无识别内容时回复提示",
+    "type": "bool",
+    "default": true
+  },
+  "notify_config_error": {
+    "description": "未配置鉴权时在聊天中提示",
+    "type": "bool",
+    "default": true
+  },
+  "notify_asr_error": {
+    "description": "识别失败时在聊天中提示",
+    "type": "bool",
+    "default": true
+  },
+  "reply_template": {
+    "description": "回复模板",
+    "type": "string",
+    "default": "语音转文字：{text}",
+    "hint": "可使用 {text}、{logid}、{request_id}、{duration_ms}。"
+  },
+  "show_logid": {
+    "description": "回复中显示火山引擎 logid",
+    "type": "bool",
+    "default": false,
+    "hint": "排查问题时可临时打开。"
+  }
+}
