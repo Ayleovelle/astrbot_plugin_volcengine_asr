@@ -39,7 +39,7 @@
 ---
 
 > [!TIP]
-> **🎙️ 推荐搭配**：本插件默认提示词会**引导 LLM 优先使用语音回复**。若希望实现「语音进 → 语音出」的自然对话体验，建议配合 [`astrbot_plugin_clonetts`](https://github.com/) 等 TTS 插件一起使用。
+> **🎙️ 推荐搭配**：本插件默认提示词会**引导 LLM 优先使用语音回复**。若希望实现「语音进 → 语音出」的自然对话体验，建议配合 [`astrbot_plugin_clonetts`](https://github.com/Radiant303/astrbot_plugin_clonetts) 等 TTS 插件一起使用。
 
 > [!NOTE]
 > **🧩 当前版本**
@@ -251,7 +251,7 @@ bin/linux-x86_64/ffmpeg
 <text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，回复时不要考虑括号内内容]
 ```
 
-> 此模板会引导 LLM **优先使用语音回复**，推荐配合 [`astrbot_plugin_clonetts`](https://github.com/) 等 TTS 插件使用，实现「语音进 → 语音出」的自然交互体验。
+> 此模板会引导 LLM **优先使用语音回复**，推荐配合 [`astrbot_plugin_clonetts`](https://github.com/Radiant303/astrbot_plugin_clonetts) 等 TTS 插件使用，实现「语音进 → 语音出」的自然交互体验。
 
 ### 偏向文字回复的模板
 
