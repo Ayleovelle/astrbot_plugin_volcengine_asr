@@ -370,6 +370,10 @@ third_party_licenses/imageio-ffmpeg.LICENSE
 
 本插件基于 **MIT License** 发布。内置的 `ffmpeg` 二进制遵循其各自的开源许可证，详见 `third_party_licenses/`。
 
+## 🗺️ 后续规划
+
+> 在完善这个插件之后我会开一个新坑，试试看能不能实现语音通话。
+
 ---
 
 <div align="center">
