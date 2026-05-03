@@ -53,6 +53,41 @@
     "type": "int",
     "default": 60
   },
+  "enable_transcode": {
+    "description": "自动转码不支持的音频格式",
+    "type": "bool",
+    "default": true,
+    "hint": "检测到 AMR、SILK 等火山引擎不支持的格式时，调用 ffmpeg 转为 WAV/MP3/OGG 后再上传。"
+  },
+  "prefer_bundled_ffmpeg": {
+    "description": "优先使用插件内置 ffmpeg",
+    "type": "bool",
+    "default": true,
+    "hint": "Linux x86_64 Docker 环境建议保持开启，不需要在 VPS 或容器里手动安装 ffmpeg。"
+  },
+  "ffmpeg_path": {
+    "description": "ffmpeg 可执行文件路径",
+    "type": "string",
+    "default": "auto",
+    "hint": "默认 auto 会优先使用插件内置 Linux x86_64 ffmpeg；特殊环境可填写绝对路径。"
+  },
+  "transcode_output_format": {
+    "description": "转码输出格式",
+    "type": "string",
+    "default": "wav",
+    "options": ["wav", "mp3", "ogg"],
+    "hint": "默认 WAV 兼容性最好；QQ 短语音通常体积可接受。"
+  },
+  "transcode_sample_rate": {
+    "description": "转码采样率",
+    "type": "int",
+    "default": 16000
+  },
+  "transcode_channels": {
+    "description": "转码声道数",
+    "type": "int",
+    "default": 1
+  },
   "enable_itn": {
     "description": "启用数字规整",
     "type": "bool",
