@@ -1,0 +1,32 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.env
+
+# Temp/scratch
+tmpenzzgj7u/
+tmpqbu8777w/
+tmptcz2ymgn/
+_pack.py
+
+# Root duplicate files (source of truth is in subfolder)
+/astrbot_plugin_volcengine_asr.zip
+/_conf_schema.json
+/main.py
+/metadata.yaml
+/requirements.txt
+/README.md
+
+# Built release artifact (published via GitHub Releases)
+astrbot_plugin_volcengine_asr.zip
+
+# Bundled ffmpeg binary (downloaded by build script or user)
+astrbot_plugin_volcengine_asr/bin/
+
+# Claude
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
