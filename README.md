@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
-  <img src="https://img.shields.io/badge/Version-1.4.2-brightgreen.svg" alt="Version 1.4.2">
+  <img src="https://img.shields.io/badge/Version-1.4.3-brightgreen.svg" alt="Version 1.4.3">
 </p>
 
 <p align="center">
@@ -47,7 +47,7 @@
 
 > [!NOTE]
 > **🧩 当前版本**
-> - 插件版本：`1.4.2`
+> - 插件版本：`1.4.3`
 > - 适配 AstrBot：`>=4.16,<5`
 > - 已处理 AstrBot `v4.24.1` 的 `StarMetadata.pages` 字段缺失兼容问题
 > - 已内置 Linux x86_64/amd64 版 `ffmpeg`，适合无法在 VPS 或 Docker 容器内单独安装 `ffmpeg` 的场景
@@ -82,6 +82,10 @@
 - 静音 / 杂音 → 引导 LLM 以「没听清」自然回应。
 - 鉴权未配置 / 识别失败 → 可选是否在聊天中提示。
 - 提供 `/volc_asr_status` 和 `/火山语音状态` 查看运行状态。
+
+### 🧩 插件兼容性
+
+- 已适配 [`astrbot_plugin_livingmemory`](https://github.com/lxfight-s-Astrbot-Plugins/astrbot_plugin_livingmemory)，通过提升 handler 优先级（`priority=10`）确保 ASR 注入先于记忆记录执行，使转写文本可被 livingmemory 正常索引。
 
 ## 🚀 安装与使用
 

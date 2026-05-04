@@ -403,7 +403,7 @@ class VolcengineAsrPlugin(Star):
             f"\n最大音频：{self.max_audio_bytes // 1024 // 1024} MB"
         )
 
-    @filter.event_message_type(filter.EventMessageType.ALL)
+    @filter.event_message_type(filter.EventMessageType.ALL, priority=10)
     async def on_message(self, event: AstrMessageEvent):
         """自动识别消息中的语音段，并直接回复文字。"""
         if not self.auto_recognize or not self._allow_event(event):
