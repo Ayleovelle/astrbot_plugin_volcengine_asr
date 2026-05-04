@@ -94,7 +94,7 @@
 从 [**GitHub Releases**](https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr/releases/latest) 下载最新的 `astrbot_plugin_volcengine_asr.zip`，在 AstrBot WebUI **插件页面 → 从文件安装** 上传即可。
 
 > [!IMPORTANT]
-> 压缩包内**顶层目录**必须为 `astrbot_plugin_volcengine_asr/`，而不是直接以 `main.py` 开头，否则会报 `Not a directory` 错误。Releases 中发布的 zip 已满足此结构。
+> WebUI 上传 zip 时，压缩包根部必须直接包含 `metadata.yaml`、`main.py`、`_conf_schema.json` 和 `requirements.txt`。不要在 zip 里再套一层 `astrbot_plugin_volcengine_asr/` 目录，否则 AstrBot 会在解压后的临时目录根部找不到 `metadata.yaml`。
 
 ### 方式二：手动放置目录
 
