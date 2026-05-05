@@ -1,0 +1,33 @@
+{
+  "exclude": [
+    ".git/**",
+    "__pycache__/**",
+    ".pytest_cache/**",
+    ".ruff_cache/**",
+    ".claude/**",
+    "output/**",
+    "tmp*/**",
+    "*.zip",
+    "*.pyc",
+    "_release_*.json",
+    "astrbot_plugin_volcengine_asr/bin/**",
+    "third_party_licenses/**"
+  ],
+  "include": [
+    "**/*"
+  ],
+  "concurrency": 4,
+  "verbose": false,
+  "output": {
+    "format": "markdown",
+    "top": 20,
+    "maxIssues": 10,
+    "showDetails": true
+  },
+  "i18n": {
+    "locale": "zh"
+  },
+  "ai": {
+    "enabled": false
+  }
+}
