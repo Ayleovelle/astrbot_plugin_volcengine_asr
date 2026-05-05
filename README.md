@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="./assets/FuckUCodeScore.svg" alt="Fuck-U-Code 代码质量评分" width="920">
+  <img src="./assets/FuckUCodeScore.svg" alt="Fuck-U-Code 代码质量评分" width="250">
 </p>
 
 <h1 align="center">AstrBot 火山引擎语音转文字插件</h1>

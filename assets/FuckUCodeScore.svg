@@ -1,27 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="250" height="54" viewBox="0 0 250 54" role="img" aria-labelledby="title desc">
   <title id="title">Fuck-U-Code 代码质量评分</title>
-  <desc id="desc">参考 ShitMountain 风格的极简评分卡，展示 fuck-u-code 分数 68.39。</desc>
+  <desc id="desc">参考 ShitMountain 风格的 250×54 极简评分卡，展示 fuck-u-code 分数 68.39。</desc>
   <defs>
-    <style>
-      .icon { font: 900 112px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; }
-      .brand { font: 900 36px "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif; fill: #5d4037; letter-spacing: 3px; }
-      .name { font: 900 64px "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif; fill: #5d4037; letter-spacing: 1px; }
-      .label { font: 900 28px "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif; fill: #5d4037; letter-spacing: 5px; }
-      .score { font: 900 74px "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif; fill: #5d4037; letter-spacing: 1px; }
-      .level { font: 800 24px "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif; fill: #5d4037; }
+    <style type="text/css">
+      .text-bold { font-family: 'Helvetica Bold', Helvetica, Arial, sans-serif; font-weight: bold; }
+      .text-regular { font-family: Helvetica, Arial, sans-serif; }
+      .emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"; }
     </style>
   </defs>
 
-  <rect width="1200" height="360" rx="28" fill="#e0c9a6"/>
-  <text class="icon" x="112" y="214">💩</text>
+  <rect x="0.5" y="0.5" width="249" height="53" rx="10" fill="#FFFFFF" stroke="#E0C9A6" stroke-width="1"/>
 
-  <text class="brand" x="314" y="118">CODE SMELL BY</text>
-  <text class="name" x="314" y="198">Fuck-U-Code</text>
-  <text class="level" x="318" y="246">屎气扑鼻 · 有点臭味，但还不至于熏死人</text>
+  <text x="28" y="38" font-size="30" class="emoji" text-anchor="middle">💩</text>
 
-  <g transform="translate(884 82)">
-    <rect width="202" height="158" rx="20" fill="#ffffff" opacity="0.88"/>
-    <text class="label" x="48" y="58">SCORE</text>
-    <text class="score" x="18" y="132">68.39</text>
+  <g fill="#5D4037" class="text-bold">
+    <text x="53" y="21" font-size="9">CODE SMELL BY</text>
+    <text x="52" y="41" font-size="21">Fuck-U-Code</text>
+  </g>
+
+  <g transform="translate(185, 13)" fill="#5D4037">
+    <text x="35" y="10" font-size="9" class="text-regular" text-anchor="middle">SCORE</text>
+    <text x="35" y="28" font-size="18" class="text-bold" text-anchor="middle">68.39</text>
   </g>
 </svg>
