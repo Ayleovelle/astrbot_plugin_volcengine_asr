@@ -1,5 +1,31 @@
 # 更新说明
 
+## v1.4.8 - 代码结构与发布包优化
+
+### 主要变更
+
+- 根目录 `main.py` 改为轻量入口，插件完整实现集中在 `astrbot_plugin_volcengine_asr/main.py`，降低双份主逻辑维护成本。
+- 修复 `voice_prompt_template` 渲染边界问题：当语音转写内容包含 `{}` 时，不再误触发模板格式化回退。
+- 保持 LivingMemory 两阶段注入语义：消息阶段写入干净转写文本，LLM 请求阶段再套语音提示词。
+- README 补清 Release zip、GitHub 仓库安装、源码 zip 的区别，并说明 `ffmpeg` 查找顺序。
+- README 补齐 `stop_event_after_recognition`、`send_empty_result_message` 配置说明，并写明火山 endpoint 默认值。
+- 新增基础 helper 测试，覆盖提示词渲染、Base64 大小估算、音频后缀识别和首个文本替换。
+- 更新 README 视觉资源：扁平化 VoiceMountain 头图，以及严格参考 ShitMountain 尺寸和布局的 fuck-u-code 小徽章。
+
+### 安装包说明
+
+- Release zip 根目录直接包含插件文件，不额外套同名目录。
+- Release zip 包含 Linux x86_64/amd64 内置 `ffmpeg`，适合 Docker 或 VPS 环境。
+- 不要使用 GitHub 绿色 Code 按钮下载的源码 zip 代替 Release zip。
+
+### 验证项目
+
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile main.py astrbot_plugin_volcengine_asr/main.py`
+- 配置 JSON 校验通过。
+- README 配置项覆盖检查通过。
+- helper 测试通过。
+- Release zip 根目录结构、版本和内置 `ffmpeg` 校验通过。
+
 ## v1.4.7 - LivingMemory 兼容重构
 
 本版本针对 `astrbot_plugin_livingmemory` 的消息处理方式重构了语音注入流程。
