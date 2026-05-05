@@ -80,6 +80,7 @@ _conf_schema.json
 requirements.txt
 README.md
 assets/VoiceMountain.svg
+assets/FuckUCodeScore.svg
 bin/linux-x86_64/ffmpeg
 ```
 
@@ -322,7 +323,8 @@ show_logid = true
 ```text
 .
 ├── assets/
-│   └── VoiceMountain.svg
+│   ├── VoiceMountain.svg
+│   └── FuckUCodeScore.svg
 ├── main.py
 ├── metadata.yaml
 ├── _conf_schema.json
@@ -333,7 +335,8 @@ show_logid = true
 │   └── imageio-ffmpeg.LICENSE
 └── astrbot_plugin_volcengine_asr/
     ├── assets/
-    │   └── VoiceMountain.svg
+    │   ├── VoiceMountain.svg
+    │   └── FuckUCodeScore.svg
     ├── main.py
     ├── metadata.yaml
     ├── _conf_schema.json
