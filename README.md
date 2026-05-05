@@ -4,6 +4,10 @@
   <img src="./assets/VoiceMountain.svg" alt="火山引擎语音转文字 AstrBot 插件" width="920">
 </p>
 
+<p align="center">
+  <img src="./assets/FuckUCodeScore.svg" alt="Fuck-U-Code 代码质量评分" width="920">
+</p>
+
 <h1 align="center">AstrBot 火山引擎语音转文字插件</h1>
 
 <p align="center">
