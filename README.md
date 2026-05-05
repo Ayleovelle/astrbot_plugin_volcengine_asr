@@ -517,6 +517,7 @@ astrbot_plugin_volcengine_asr/pages/status/index.html
 | ASR 状态 | 鉴权、自动识别、提交模式、处理方式、最大音频大小。 |
 | 转码链路 | 是否启用转码、输出格式、采样率、声道数、ffmpeg 来源。 |
 | 情绪判断 LLM | 启用状态、模型、上下文轮数、最大参考权重、失败放行。 |
+| 模型可视化 | 展示 ASR → 情绪 JSON → 熵确定性 → 证据强度 → 参考权重 → 主 LLM 的完整工作流，并用三维情绪云图表现情绪分布。 |
 | 触发与兼容 | 私聊/群聊开关、仅 @ 或唤醒、忽略自身、LivingMemory 纯文本保护。 |
 
 可编辑内容：
@@ -529,6 +530,7 @@ astrbot_plugin_volcengine_asr/pages/status/index.html
 
 - 配置区按功能分组，切换分组时有淡入和位移动画。
 - 顶部状态卡片用于快速判断鉴权、提交模式、转码和情绪判断状态。
+- 情绪模型可视化页提供三维情绪云图、负面到正面的平滑颜色过渡、公式展开、可调参数滑块和文献依据链接。
 - 保存成功或失败会在右下角弹出过渡提示。
 - 前端通过 AstrBot Plugin Pages 的 `window.AstrBotPluginPage.apiGet/apiPost` 调后端接口。
 - 后端按 `_conf_schema.json` 做类型转换和可选值校验，再调用 `save_config()` 写回配置。

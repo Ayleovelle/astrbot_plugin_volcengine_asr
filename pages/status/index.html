@@ -276,6 +276,213 @@
       font-size: 12px;
       line-height: 1.5;
     }
+    .viz {
+      display: grid;
+      gap: 16px;
+      padding: 18px 20px 20px;
+    }
+    .workflow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 10px;
+    }
+    .step {
+      position: relative;
+      min-height: 82px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-strong);
+      padding: 12px;
+      animation: rise 460ms ease both;
+    }
+    .step::after {
+      content: "";
+      position: absolute;
+      right: -10px;
+      top: 50%;
+      width: 10px;
+      height: 2px;
+      background: var(--line-strong);
+    }
+    .step:last-child::after {
+      display: none;
+    }
+    .step .number {
+      color: var(--accent);
+      font-weight: 900;
+      font-size: 13px;
+    }
+    .step .name {
+      margin-top: 6px;
+      font-weight: 900;
+    }
+    .step .desc {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .viz-grid {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
+      gap: 16px;
+    }
+    .viz-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-strong);
+      padding: 16px;
+    }
+    .viz-card h3 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+    .cloud-wrap {
+      position: relative;
+      min-height: 330px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background:
+        linear-gradient(90deg, rgba(37, 99, 235, 0.18), rgba(245, 158, 11, 0.18)),
+        radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.86), transparent 50%);
+      perspective: 900px;
+    }
+    .cloud-scene {
+      position: absolute;
+      inset: 38px 24px 42px;
+      transform-style: preserve-3d;
+      transform: rotateX(58deg) rotateZ(-32deg);
+      animation: cloudFloat 7s ease-in-out infinite alternate;
+    }
+    .cloud-plane {
+      position: absolute;
+      inset: 0;
+      border: 1px solid rgba(154, 52, 18, 0.20);
+      border-radius: 8px;
+      background:
+        linear-gradient(rgba(154, 52, 18, 0.12) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(154, 52, 18, 0.12) 1px, transparent 1px);
+      background-size: 32px 32px;
+      transform: translateZ(-10px);
+    }
+    .cloud-axis {
+      position: absolute;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+    .axis-negative { left: 16px; bottom: 12px; }
+    .axis-positive { right: 16px; bottom: 12px; }
+    .axis-arousal { left: 16px; top: 12px; }
+    .axis-weight { right: 16px; top: 12px; }
+    .cloud-point {
+      position: absolute;
+      width: var(--size);
+      height: var(--size);
+      left: var(--x);
+      top: var(--y);
+      border-radius: 50%;
+      background: hsl(var(--hue), 82%, 54%);
+      box-shadow:
+        0 0 0 5px hsla(var(--hue), 82%, 54%, 0.14),
+        0 18px 30px hsla(var(--hue), 82%, 30%, 0.22);
+      transform: translate3d(-50%, -50%, var(--z));
+      transition: left 360ms ease, top 360ms ease, transform 360ms ease, background 360ms ease;
+    }
+    .cloud-point::after {
+      content: attr(data-label) " " attr(data-weight);
+      position: absolute;
+      left: 50%;
+      top: calc(100% + 6px);
+      transform: translateX(-50%) rotateZ(32deg) rotateX(-58deg);
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: rgba(255, 247, 237, 0.88);
+      color: var(--text);
+      white-space: nowrap;
+      font-size: 11px;
+      font-weight: 800;
+      box-shadow: 0 6px 16px rgba(67, 20, 7, 0.10);
+    }
+    .cloud-legend {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .color-ramp {
+      height: 10px;
+      margin-top: 12px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #2563eb 0%, #14b8a6 34%, #facc15 68%, #f97316 100%);
+    }
+    .formula {
+      display: grid;
+      gap: 10px;
+    }
+    .formula-line {
+      border-left: 4px solid var(--line-strong);
+      border-radius: 8px;
+      background: rgba(255, 237, 213, 0.62);
+      padding: 10px 12px;
+    }
+    .formula-line code {
+      font-family: "JetBrains Mono", Consolas, monospace;
+      color: var(--accent-strong);
+      font-weight: 800;
+      white-space: normal;
+    }
+    .knobs {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+    }
+    .knob {
+      display: grid;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .knob input {
+      accent-color: var(--accent);
+    }
+    .score {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 12px;
+    }
+    .score-box {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: rgba(255, 247, 237, 0.72);
+    }
+    .score-box span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .score-box strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 22px;
+    }
+    .refs {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.65;
+      font-size: 13px;
+    }
+    .refs a {
+      color: var(--accent-strong);
+    }
     .toast {
       position: fixed;
       right: 18px;
@@ -305,6 +512,10 @@
       from { opacity: 0; transform: translateY(14px); }
       to { opacity: 1; transform: translateY(0); }
     }
+    @keyframes cloudFloat {
+      from { transform: rotateX(58deg) rotateZ(-32deg) translateZ(0); }
+      to { transform: rotateX(58deg) rotateZ(-26deg) translateZ(8px); }
+    }
     @media (max-width: 760px) {
       main {
         width: min(100% - 20px, 1180px);
@@ -329,6 +540,15 @@
       }
       .tab {
         white-space: nowrap;
+      }
+      .viz-grid {
+        grid-template-columns: 1fr;
+      }
+      .step::after {
+        display: none;
+      }
+      .cloud-wrap {
+        min-height: 290px;
       }
     }
     @media (prefers-color-scheme: dark) {
@@ -392,12 +612,38 @@
       { id: 'recognition', title: '识别参数', keys: ['enable_itn', 'enable_punc', 'enable_ddc', 'enable_speaker_info'] },
       { id: 'inject', title: '注入与回复', keys: ['auto_recognize', 'inject_as_user_input', 'voice_prompt_template', 'inject_on_unclear_voice', 'unclear_voice_prompt', 'reply_transcription', 'reply_template', 'stop_event_after_recognition', 'send_empty_result_message'] },
       { id: 'scope', title: '触发与排查', keys: ['enable_private', 'enable_group', 'only_when_at_or_wake', 'ignore_self', 'notify_config_error', 'notify_asr_error', 'show_logid'] },
-      { id: 'emotion', title: '情绪判断', keys: ['enable_emotion_analysis', 'emotion_model_id', 'emotion_context_turns', 'emotion_max_respect_weight_percent', 'emotion_timeout_seconds', 'emotion_fail_open', 'emotion_prompt_template'] }
+      { id: 'emotion', title: '情绪判断', keys: ['enable_emotion_analysis', 'emotion_model_id', 'emotion_context_turns', 'emotion_max_respect_weight_percent', 'emotion_timeout_seconds', 'emotion_fail_open', 'emotion_prompt_template'] },
+      { id: 'model', title: '模型可视化', keys: [] }
     ];
 
     let fields = [];
     let activeGroup = groups[0].id;
     let saving = false;
+    const sample = {
+      transcriptChars: 42,
+      confidence: 0.71,
+      voiceTextSupport: 0.75,
+      contextSupport: 0.40,
+      weights: {
+        anxious: 0.62,
+        sad: 0.18,
+        neutral: 0.12,
+        confused: 0.08,
+        happy: 0.10,
+        excited: 0.06
+      }
+    };
+    const emotionCoordinates = {
+      angry: { valence: -0.82, arousal: 0.82 },
+      anxious: { valence: -0.64, arousal: 0.74 },
+      frustrated: { valence: -0.72, arousal: 0.60 },
+      sad: { valence: -0.78, arousal: 0.30 },
+      tired: { valence: -0.48, arousal: 0.18 },
+      confused: { valence: -0.18, arousal: 0.52 },
+      neutral: { valence: 0.00, arousal: 0.28 },
+      happy: { valence: 0.72, arousal: 0.52 },
+      excited: { valence: 0.82, arousal: 0.86 }
+    };
 
     const $ = (id) => document.getElementById(id);
     const yesNo = (value) => value ? '启用' : '关闭';
@@ -487,6 +733,10 @@
 
     function renderFields(animated = false) {
       const group = groups.find((item) => item.id === activeGroup) || groups[0];
+      if (group.id === 'model') {
+        renderModel(animated);
+        return;
+      }
       const selected = fields.filter((field) => group.keys.includes(field.key));
       const content = $('content');
       if (animated) content.classList.add('fade');
@@ -513,6 +763,177 @@
         bindSwitchLabels();
         content.classList.remove('fade');
       }, animated ? 150 : 0);
+    }
+
+    function renderModel(animated = false) {
+      const content = $('content');
+      if (animated) content.classList.add('fade');
+      window.setTimeout(() => {
+        const maxWeightField = fields.find((field) => field.key === 'emotion_max_respect_weight_percent');
+        const maxWeight = Number(maxWeightField && maxWeightField.value ? maxWeightField.value : 60) / 100;
+        const values = computeEmotionModel(maxWeight);
+        content.innerHTML = `
+          <article class="panel">
+            <header>
+              <div>
+                <h2>情绪判断工作流</h2>
+                <div class="hint">从 ASR 文本到主 LLM 语气参考权重的可视化</div>
+              </div>
+            </header>
+            <div class="viz">
+              <div class="workflow">
+                ${[
+                  ['01', 'ASR 转写', '得到纯文本，不写入情绪标签'],
+                  ['02', '情绪 LLM', '只输出 JSON 情绪分布和证据'],
+                  ['03', '归一化', '裁剪权重并计算 Shannon entropy'],
+                  ['04', '证据强度', '文本证据 0.7 + 上下文 0.3'],
+                  ['05', '参考权重', '把结果限制在最大权重内'],
+                  ['06', '主 LLM', '只按权重调整语气，不污染记忆']
+                ].map((step) => `
+                  <div class="step">
+                    <div class="number">${step[0]}</div>
+                    <div class="name">${step[1]}</div>
+                    <div class="desc">${step[2]}</div>
+                  </div>
+                `).join('')}
+              </div>
+
+              <div class="viz-grid">
+                <div class="viz-card">
+                  <h3>三维情绪云图</h3>
+                  <div class="cloud-wrap">
+                    <span class="cloud-axis axis-negative">负面</span>
+                    <span class="cloud-axis axis-positive">正面</span>
+                    <span class="cloud-axis axis-arousal">唤醒度</span>
+                    <span class="cloud-axis axis-weight">权重高度</span>
+                    <div class="cloud-scene">
+                      <div class="cloud-plane"></div>
+                      ${cloudPointsHtml()}
+                    </div>
+                  </div>
+                  <div class="color-ramp"></div>
+                  <div class="cloud-legend">
+                    <span>横向：负面 → 正面情绪效价</span>
+                    <span>纵向：唤醒度</span>
+                    <span>高度/大小：情绪权重</span>
+                  </div>
+                </div>
+
+                <div class="viz-card">
+                  <h3>计算结果</h3>
+                  <div class="score">
+                    <div class="score-box"><span>certainty</span><strong id="certaintyValue">${values.certainty.toFixed(3)}</strong></div>
+                    <div class="score-box"><span>evidence</span><strong id="evidenceValue">${values.evidence.toFixed(3)}</strong></div>
+                    <div class="score-box"><span>respect_weight</span><strong id="respectWeightValue">${values.respectWeight.toFixed(3)}</strong></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="viz-card">
+                <h3>参数示例</h3>
+                <div class="knobs">
+                  ${[
+                    ['transcriptChars', '文本长度', 1, 120, sample.transcriptChars],
+                    ['confidence', 'LLM 置信度', 0, 1, sample.confidence],
+                    ['voiceTextSupport', '文本支持度', 0, 1, sample.voiceTextSupport],
+                    ['contextSupport', '上下文支持度', 0, 1, sample.contextSupport]
+                  ].map((item) => `
+                    <label class="knob">
+                      <span>${item[1]}：<strong id="${item[0]}Value">${item[4]}</strong></span>
+                      <input data-model="${item[0]}" type="range" min="${item[2]}" max="${item[3]}" step="${item[2] === 0 ? 0.01 : 1}" value="${item[4]}">
+                    </label>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="viz-card">
+                <h3>公式展开</h3>
+                <div class="formula">
+                  <div class="formula-line"><code>H(p) = -Σ p_i log(p_i)</code></div>
+                  <div class="formula-line"><code>certainty = 1 - H(p) / log(N) = <span id="certaintyFormula">${values.certainty.toFixed(3)}</span></code></div>
+                  <div class="formula-line"><code>evidence = length_factor * (0.7 * voice_text_support + 0.3 * context_support) = <span id="evidenceFormula">${values.evidence.toFixed(3)}</span></code></div>
+                  <div class="formula-line"><code>respect_weight = clamp(max_weight * (0.50 * confidence + 0.30 * certainty + 0.20 * evidence)) = <span id="respectWeightFormula">${values.respectWeight.toFixed(3)}</span></code></div>
+                </div>
+              </div>
+
+              <div class="viz-card">
+                <h3>文献依据</h3>
+                <ol class="refs">
+                  <li><a href="https://doi.org/10.1037/h0077714" target="_blank" rel="noreferrer">Russell, 1980</a>：valence / arousal 二维情绪空间。</li>
+                  <li><a href="https://doi.org/10.1017/S0954579405050340" target="_blank" rel="noreferrer">Posner, Russell & Peterson, 2005</a>：环状情绪模型综述。</li>
+                  <li><a href="https://doi.org/10.1002/j.1538-7305.1948.tb01338.x" target="_blank" rel="noreferrer">Shannon, 1948</a>：entropy 不确定性度量。</li>
+                  <li><a href="https://doi.org/10.1037/0022-3514.48.4.813" target="_blank" rel="noreferrer">Smith & Ellsworth, 1985</a>：认知评价与语境证据。</li>
+                  <li><a href="https://arxiv.org/abs/1706.04599" target="_blank" rel="noreferrer">Guo et al., 2017</a>：现代神经网络置信度校准。</li>
+                </ol>
+              </div>
+            </div>
+          </article>
+        `;
+        bindModelKnobs(maxWeight);
+        content.classList.remove('fade');
+      }, animated ? 150 : 0);
+    }
+
+    function computeEmotionModel(maxRespectWeight) {
+      const weights = Object.values(sample.weights).filter((weight) => weight > 0);
+      const total = weights.reduce((sum, weight) => sum + weight, 0);
+      const probabilities = weights.map((weight) => weight / total);
+      const entropy = probabilities.reduce((sum, probability) => sum - probability * Math.log(probability), 0);
+      const certainty = probabilities.length <= 1 ? 1 : clamp(1 - entropy / Math.log(probabilities.length), 0, 1);
+      const lengthFactor = Math.min(1, Math.log(1 + Math.max(0, sample.transcriptChars)) / Math.log(81));
+      const evidence = lengthFactor * (0.7 * sample.voiceTextSupport + 0.3 * sample.contextSupport);
+      let respectWeight = maxRespectWeight * (0.50 * sample.confidence + 0.30 * certainty + 0.20 * evidence);
+      if (sample.transcriptChars < 12) respectWeight = Math.min(respectWeight, 0.25);
+      return {
+        certainty,
+        evidence,
+        respectWeight: clamp(respectWeight, 0, maxRespectWeight)
+      };
+    }
+
+    function cloudPointsHtml() {
+      return Object.entries(sample.weights).map(([label, weight]) => {
+        const point = emotionCoordinates[label] || { valence: 0, arousal: 0.5 };
+        const x = 8 + ((point.valence + 1) / 2) * 84;
+        const y = 88 - point.arousal * 76;
+        const z = 8 + weight * 92;
+        const size = 13 + weight * 30;
+        const hue = 220 - ((point.valence + 1) / 2) * 190;
+        return `
+          <span
+            class="cloud-point"
+            data-label="${escapeAttr(label)}"
+            data-weight="${weight.toFixed(2)}"
+            style="--x:${x.toFixed(1)}%; --y:${y.toFixed(1)}%; --z:${z.toFixed(1)}px; --size:${size.toFixed(1)}px; --hue:${hue.toFixed(0)}"
+          ></span>
+        `;
+      }).join('');
+    }
+
+    function bindModelKnobs(maxWeight) {
+      document.querySelectorAll('[data-model]').forEach((input) => {
+        input.addEventListener('input', () => {
+          sample[input.dataset.model] = Number(input.value);
+          updateModelValues(maxWeight);
+        });
+      });
+      updateModelValues(maxWeight);
+    }
+
+    function updateModelValues(maxWeight) {
+      const values = computeEmotionModel(maxWeight);
+      Object.entries({
+        transcriptCharsValue: sample.transcriptChars,
+        confidenceValue: sample.confidence.toFixed(2),
+        voiceTextSupportValue: sample.voiceTextSupport.toFixed(2),
+        contextSupportValue: sample.contextSupport.toFixed(2),
+        certaintyValue: values.certainty.toFixed(3),
+        evidenceValue: values.evidence.toFixed(3),
+        respectWeightValue: values.respectWeight.toFixed(3),
+        certaintyFormula: values.certainty.toFixed(3),
+        evidenceFormula: values.evidence.toFixed(3),
+        respectWeightFormula: values.respectWeight.toFixed(3)
+      }).forEach(([id, value]) => setText(id, value));
     }
 
     function bindSwitchLabels() {
