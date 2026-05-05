@@ -10,13 +10,6 @@ tmpqbu8777w/
 tmptcz2ymgn/
 _pack.py
 
-# Root duplicate files (source of truth is in subfolder)
-/astrbot_plugin_volcengine_asr.zip
-/_conf_schema.json
-/main.py
-/metadata.yaml
-/requirements.txt
-
 # Built release artifact (published via GitHub Releases)
 astrbot_plugin_volcengine_asr.zip
 

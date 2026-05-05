@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
-  <img src="https://img.shields.io/badge/Version-1.4.5-brightgreen.svg" alt="Version 1.4.5">
+  <img src="https://img.shields.io/badge/Version-1.4.6-brightgreen.svg" alt="Version 1.4.6">
 </p>
 
 <p align="center">
@@ -47,7 +47,7 @@
 
 > [!NOTE]
 > **🧩 当前版本**
-> - 插件版本：`1.4.5`
+> - 插件版本：`1.4.6`
 > - 适配 AstrBot：`>=4.16,<5`
 > - 已处理 AstrBot `v4.24.1` 的 `StarMetadata.pages` 字段缺失兼容问题
 > - 已内置 Linux x86_64/amd64 版 `ffmpeg`，适合无法在 VPS 或 Docker 容器内单独安装 `ffmpeg` 的场景
@@ -96,7 +96,17 @@
 > [!IMPORTANT]
 > WebUI 上传 zip 时，压缩包根部必须直接包含 `metadata.yaml`、`main.py`、`_conf_schema.json` 和 `requirements.txt`。不要在 zip 里再套一层 `astrbot_plugin_volcengine_asr/` 目录，否则 AstrBot 会在解压后的临时目录根部找不到 `metadata.yaml`。
 
-### 方式二：手动放置目录
+### 方式二：WebUI 从 GitHub 仓库安装
+
+在 AstrBot WebUI 里使用仓库地址安装：
+
+```text
+https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr
+```
+
+仓库根目录已直接提供 `metadata.yaml`、`main.py`、`_conf_schema.json` 和 `requirements.txt`，可被 AstrBot 直接识别。GitHub 安装不会包含 Releases zip 里的内置 `bin/linux-x86_64/ffmpeg`，因此根目录 `requirements.txt` 会额外安装 `imageio-ffmpeg` 作为转码兜底。
+
+### 方式三：手动放置目录
 
 将整个目录放到 AstrBot 插件目录：
 
@@ -121,7 +131,7 @@ third_party_licenses/imageio-ffmpeg.LICENSE
 > - 推荐直接下载 Releases 中已打包好的 zip，解压即用。
 > - 若手动克隆仓库，可从 [`imageio-ffmpeg` wheel](https://pypi.org/project/imageio-ffmpeg/) 中提取，或复制系统 `ffmpeg` 到该位置，也可将 `ffmpeg_path` 指向任意可执行文件。
 
-安装后在 AstrBot WebUI 重载插件，或重启 AstrBot。`requirements.txt` 目前只依赖 `httpx`。
+安装后在 AstrBot WebUI 重载插件，或重启 AstrBot。Release 压缩包内的 `requirements.txt` 只依赖 `httpx`；仓库根目录的 `requirements.txt` 额外包含 `imageio-ffmpeg`，用于从 GitHub 安装时补足转码可执行文件。
 
 ## 🔑 火山引擎准备
 
@@ -351,15 +361,23 @@ flowchart LR
 ## 📂 文件结构
 
 ```text
-astrbot_plugin_volcengine_asr/
-├── main.py                       # 插件主逻辑
-├── metadata.yaml                 # 插件元信息
+.
+├── main.py                       # 插件主逻辑，供 GitHub 安装直接加载
+├── metadata.yaml                 # 插件元信息，供 GitHub 安装直接读取
 ├── _conf_schema.json             # 配置项 schema
-├── requirements.txt              # Python 依赖（仅 httpx）
-├── README.md                     # 本文档
-├── bin/
-│   └── linux-x86_64/
-│       └── ffmpeg                # 内置 ffmpeg (Linux x86_64)
+├── requirements.txt              # GitHub 安装依赖（httpx + imageio-ffmpeg）
+├── README.md                     # GitHub 仓库文档
+├── astrbot_plugin_volcengine_asr/
+│   ├── main.py                   # Release zip 源文件
+│   ├── metadata.yaml
+│   ├── _conf_schema.json
+│   ├── requirements.txt          # Release zip 依赖（仅 httpx）
+│   ├── README.md
+│   ├── bin/
+│   │   └── linux-x86_64/
+│   │       └── ffmpeg            # 内置 ffmpeg (仅随 Release zip 发布)
+│   └── third_party_licenses/
+│       └── imageio-ffmpeg.LICENSE
 └── third_party_licenses/
     └── imageio-ffmpeg.LICENSE    # 第三方许可证
 ```

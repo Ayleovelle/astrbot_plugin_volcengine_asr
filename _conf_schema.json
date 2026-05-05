@@ -1,0 +1,200 @@
+{
+  "api_key": {
+    "description": "新版控制台 API Key",
+    "type": "string",
+    "default": "",
+    "hint": "填写后优先使用 X-Api-Key 鉴权。新版控制台通常只需要这一项。",
+    "obvious_hint": true
+  },
+  "app_key": {
+    "description": "旧版控制台 App Key",
+    "type": "string",
+    "default": "",
+    "hint": "仅旧版控制台需要。未填写 api_key 时，会和 access_key 一起用于鉴权。"
+  },
+  "access_key": {
+    "description": "旧版控制台 Access Key",
+    "type": "string",
+    "default": "",
+    "hint": "仅旧版控制台需要。未填写 api_key 时，会和 app_key 一起用于鉴权。"
+  },
+  "resource_id": {
+    "description": "火山引擎资源 ID",
+    "type": "string",
+    "default": "volc.bigasr.auc_turbo",
+    "hint": "大模型录音文件极速版固定为 volc.bigasr.auc_turbo，需在火山引擎侧开通权限。"
+  },
+  "endpoint": {
+    "description": "识别接口地址",
+    "type": "string",
+    "default": "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
+  },
+  "uid": {
+    "description": "用户标识 uid",
+    "type": "string",
+    "default": "",
+    "hint": "留空时自动使用 api_key/app_key 或 astrbot。"
+  },
+  "submit_mode": {
+    "description": "音频提交方式",
+    "type": "string",
+    "default": "base64",
+    "options": ["base64", "url"],
+    "hint": "base64 会由 AstrBot 所在机器下载语音后上传，适合 OneBot/NatCat。url 要求火山引擎公网可访问该 URL。"
+  },
+  "max_audio_mb": {
+    "description": "最大音频大小 MB",
+    "type": "int",
+    "default": 20,
+    "hint": "火山引擎接口上限为 100MB；Base64 上传建议保持 20MB 以内。"
+  },
+  "timeout_seconds": {
+    "description": "请求超时秒数",
+    "type": "int",
+    "default": 60
+  },
+  "enable_transcode": {
+    "description": "自动转码不支持的音频格式",
+    "type": "bool",
+    "default": true,
+    "hint": "检测到 AMR、SILK 等火山引擎不支持的格式时，调用 ffmpeg 转为 WAV/MP3/OGG 后再上传。"
+  },
+  "prefer_bundled_ffmpeg": {
+    "description": "优先使用插件内置 ffmpeg",
+    "type": "bool",
+    "default": true,
+    "hint": "Linux x86_64 Docker 环境建议保持开启，不需要在 VPS 或容器里手动安装 ffmpeg。"
+  },
+  "ffmpeg_path": {
+    "description": "ffmpeg 可执行文件路径",
+    "type": "string",
+    "default": "auto",
+    "hint": "默认 auto 会优先使用插件内置 Linux x86_64 ffmpeg；特殊环境可填写绝对路径。"
+  },
+  "transcode_output_format": {
+    "description": "转码输出格式",
+    "type": "string",
+    "default": "wav",
+    "options": ["wav", "mp3", "ogg"],
+    "hint": "默认 WAV 兼容性最好；QQ 短语音通常体积可接受。"
+  },
+  "transcode_sample_rate": {
+    "description": "转码采样率",
+    "type": "int",
+    "default": 16000
+  },
+  "transcode_channels": {
+    "description": "转码声道数",
+    "type": "int",
+    "default": 1
+  },
+  "enable_itn": {
+    "description": "启用数字规整",
+    "type": "bool",
+    "default": true
+  },
+  "enable_punc": {
+    "description": "启用标点",
+    "type": "bool",
+    "default": true
+  },
+  "enable_ddc": {
+    "description": "启用顺滑",
+    "type": "bool",
+    "default": true
+  },
+  "enable_speaker_info": {
+    "description": "启用说话人信息",
+    "type": "bool",
+    "default": false
+  },
+  "auto_recognize": {
+    "description": "自动识别语音消息",
+    "type": "bool",
+    "default": true
+  },
+  "inject_as_user_input": {
+    "description": "将识别结果注入为用户输入",
+    "type": "bool",
+    "default": true,
+    "hint": "默认开启。开启后不会直接回复转写文本，而是把语音转写包装成用户文本输入，继续交给后续 LLM 处理。"
+  },
+  "voice_prompt_template": {
+    "description": "语音转文字注入模板",
+    "type": "string",
+    "default": "<text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，请不要告诉用户自己是通过转文字的方式听到的，回复时不要考虑括号内内容]",
+    "hint": "支持 <text> 或 {text} 作为识别文本占位符。默认模板会引导 LLM 优先使用语音回复，推荐配合 astrbot_plugin_clonetts 使用。"
+  },
+  "inject_on_unclear_voice": {
+    "description": "语音无法识别时也注入为用户输入",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后，遇到静音/杂音/空结果时，会以‘没听清’提示注入给 LLM，让模型自然请用户重说，而不是机械回复‘静音音频’。"
+  },
+  "unclear_voice_prompt": {
+    "description": "语音没听清时的注入提示词",
+    "type": "string",
+    "default": "[用户刚刚发送了一条语音，但系统没有听清内容（可能是静音、杂音或识别失败）。请以没听清为由，自然地请用户再说一次或改用文字补充，不要直接说是系统错误。]",
+    "hint": "仅在 inject_on_unclear_voice=true 时生效。"
+  },
+  "reply_transcription": {
+    "description": "直接回复转写文本",
+    "type": "bool",
+    "default": false,
+    "hint": "仅调试或兼容旧行为时开启。开启后会直接在聊天中回复转写结果，而不是注入为用户输入。"
+  },
+  "enable_private": {
+    "description": "私聊启用",
+    "type": "bool",
+    "default": true
+  },
+  "enable_group": {
+    "description": "群聊启用",
+    "type": "bool",
+    "default": true
+  },
+  "only_when_at_or_wake": {
+    "description": "仅被唤醒或被 @ 时识别",
+    "type": "bool",
+    "default": false,
+    "hint": "群聊较吵时可打开，私聊通常不需要。"
+  },
+  "ignore_self": {
+    "description": "忽略机器人自己发送的消息",
+    "type": "bool",
+    "default": true
+  },
+  "stop_event_after_recognition": {
+    "description": "直接回复转写后阻止事件继续传播",
+    "type": "bool",
+    "default": true,
+    "hint": "仅在 reply_transcription=true 的旧行为下生效。默认注入模式会继续传播给 LLM。"
+  },
+  "send_empty_result_message": {
+    "description": "无识别内容时回复提示",
+    "type": "bool",
+    "default": true
+  },
+  "notify_config_error": {
+    "description": "未配置鉴权时在聊天中提示",
+    "type": "bool",
+    "default": true
+  },
+  "notify_asr_error": {
+    "description": "识别失败时在聊天中提示",
+    "type": "bool",
+    "default": true
+  },
+  "reply_template": {
+    "description": "直接回复模板",
+    "type": "string",
+    "default": "语音转文字：{text}",
+    "hint": "仅在 reply_transcription=true 时使用。可使用 {text}、{logid}、{request_id}、{duration_ms}。"
+  },
+  "show_logid": {
+    "description": "回复中显示火山引擎 logid",
+    "type": "bool",
+    "default": false,
+    "hint": "排查问题时可临时打开。"
+  }
+}

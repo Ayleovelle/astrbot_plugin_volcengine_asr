@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
-  <img src="https://img.shields.io/badge/Version-1.4.5-brightgreen.svg" alt="Version 1.4.5">
+  <img src="https://img.shields.io/badge/Version-1.4.6-brightgreen.svg" alt="Version 1.4.6">
 </p>
 
 <p align="center">
@@ -47,7 +47,7 @@
 
 > [!NOTE]
 > **🧩 当前版本**
-> - 插件版本：`1.4.5`
+> - 插件版本：`1.4.6`
 > - 适配 AstrBot：`>=4.16,<5`
 > - 已处理 AstrBot `v4.24.1` 的 `StarMetadata.pages` 字段缺失兼容问题
 > - 已内置 Linux x86_64/amd64 版 `ffmpeg`，适合无法在 VPS 或 Docker 容器内单独安装 `ffmpeg` 的场景
