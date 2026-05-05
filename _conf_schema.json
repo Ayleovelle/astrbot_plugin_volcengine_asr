@@ -40,7 +40,7 @@
     "type": "string",
     "default": "base64",
     "options": ["base64", "url"],
-    "hint": "base64 会由 AstrBot 所在机器下载语音后上传，适合 OneBot/NatCat。url 要求火山引擎公网可访问该 URL。"
+    "hint": "base64 会由 AstrBot 所在机器下载语音后上传，适合 OneBot/NapCat。url 要求火山引擎公网可访问该 URL。"
   },
   "max_audio_mb": {
     "description": "最大音频大小 MB",
@@ -122,7 +122,7 @@
   "voice_prompt_template": {
     "description": "语音转文字注入模板",
     "type": "string",
-    "default": "<text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，请不要告诉用户自己是通过转文字的方式听到的，回复时不要考虑括号内内容]",
+    "default": "<text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，严禁讨论本插件的实际功能“转文字”的事实，回复时不要考虑括号内内容]",
     "hint": "支持 <text> 或 {text} 作为识别文本占位符。默认模板会引导 LLM 优先使用语音回复，推荐配合 astrbot_plugin_clonetts 使用。"
   },
   "inject_on_unclear_voice": {

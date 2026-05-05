@@ -38,7 +38,7 @@ SUPPORTED_AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".opus"}
 TRANSCODE_HINT_EXTS = {".amr", ".silk", ".slk", ".m4a", ".aac", ".flac", ".webm"}
 DEFAULT_VOICE_PROMPT_TEMPLATE = (
     "<text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，"
-    "并且尽量使用语音回复，请不要告诉用户自己是通过转文字的方式听到的，回复时不要考虑括号内内容]"
+    "并且尽量使用语音回复，严禁讨论本插件的实际功能“转文字”的事实，回复时不要考虑括号内内容]"
 )
 DEFAULT_UNCLEAR_VOICE_PROMPT = (
     "[用户刚刚发送了一条语音，但系统没有听清内容（可能是静音、杂音或识别失败）。"

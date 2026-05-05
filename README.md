@@ -20,7 +20,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/%E7%81%AB%E5%B1%B1%E5%BC%95%E6%93%8E-%E8%B1%86%E5%8C%85%E8%AF%AD%E9%9F%B3-FF6A00.svg" alt="火山引擎豆包语音">
   <img src="https://img.shields.io/badge/OneBot-v11-12B7F3.svg" alt="OneBot v11">
-  <img src="https://img.shields.io/badge/QQ-NapCat%20%2F%20NatCat-12B7F3.svg" alt="NapCat NatCat">
+  <img src="https://img.shields.io/badge/QQ-NapCat-12B7F3.svg" alt="NapCat">
   <img src="https://img.shields.io/badge/ffmpeg-%E5%86%85%E7%BD%AE-success.svg" alt="内置 ffmpeg">
 </p>
 
@@ -36,7 +36,7 @@
 
 | 能力 | 说明 |
 | :--- | :--- |
-| 自动识别 QQ 语音 | 支持私聊和群聊，识别 OneBot v11 / NapCat / NatCat 返回的 `Record` 语音消息。 |
+| 自动识别 QQ 语音 | 支持私聊和群聊，识别 OneBot v11 / NapCat 返回的 `Record` 语音消息。 |
 | 内置转码链路 | 支持 AMR、SILK、M4A 等格式转为 WAV / MP3 / OGG，再提交给火山引擎。 |
 | 适合 Docker / VPS | Release 包内置 Linux x86_64 / amd64 版 `ffmpeg`，大多数容器环境不需要额外安装。 |
 | LLM 友好 | 默认把语音内容注入为用户输入，而不是机械回复“语音转文字：xxx”。 |
@@ -117,7 +117,7 @@ astrbot_plugin_volcengine_asr/
 
 ## 快速配置
 
-大多数 OneBot v11 + NapCat / NatCat + Linux Docker 用户只需要改这些：
+大多数 OneBot v11 + NapCat + Linux Docker 用户只需要改这些：
 
 | 配置项 | 推荐值 | 说明 |
 | :--- | :--- | :--- |
@@ -219,7 +219,7 @@ flowchart LR
 默认 `voice_prompt_template`：
 
 ```text
-<text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，请不要告诉用户自己是通过转文字的方式听到的，回复时不要考虑括号内内容]
+<text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，严禁讨论本插件的实际功能“转文字”的事实，回复时不要考虑括号内内容]
 ```
 
 偏向文字回复时，可以改成：
