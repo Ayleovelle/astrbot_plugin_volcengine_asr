@@ -3,10 +3,12 @@ from astrbot_plugin_volcengine_asr.main import (
     _append_emotion_guidance,
     _build_emotion_judgement,
     _build_emotion_prompt,
+    _coerce_config_value,
     _compute_emotion_respect_weight,
     _detect_audio_suffix,
     _entropy_certainty,
     _estimate_base64_size,
+    _load_conf_schema,
     _normalize_emotion_weights,
     _render_named_placeholders,
     _render_prompt_template,
@@ -156,6 +158,19 @@ def test_render_named_placeholders_only_replaces_named_fields():
     )
 
     assert rendered == '{"label":"neutral"} 你好 {context} 上文 {unknown}'
+
+
+def test_coerce_config_value_uses_schema_types_and_options():
+    assert _coerce_config_value("flag", "true", {"type": "bool"}) is True
+    assert _coerce_config_value("count", "12", {"type": "int"}) == 12
+    assert _coerce_config_value("mode", "base64", {"type": "string", "options": ["base64", "url"]}) == "base64"
+
+
+def test_load_conf_schema_reads_config_schema():
+    schema = _load_conf_schema()
+
+    assert "api_key" in schema
+    assert "enable_emotion_analysis" in schema
 
 
 def test_append_emotion_guidance_only_changes_llm_text():

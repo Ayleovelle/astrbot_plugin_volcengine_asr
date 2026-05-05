@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>火山语音控制台</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #fff7ed;
+      --surface: rgba(255, 255, 255, 0.82);
+      --surface-strong: #ffffff;
+      --line: #fed7aa;
+      --line-strong: #fb923c;
+      --text: #431407;
+      --muted: #9a3412;
+      --accent: #ea580c;
+      --accent-strong: #c2410c;
+      --ok: #15803d;
+      --danger: #b91c1c;
+      --shadow: 0 18px 44px rgba(154, 52, 18, 0.12);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 12% 8%, rgba(251, 146, 60, 0.22), transparent 28%),
+        radial-gradient(circle at 82% 18%, rgba(234, 88, 12, 0.14), transparent 26%),
+        linear-gradient(135deg, #fff7ed 0%, #ffedd5 52%, #fed7aa 100%);
+    }
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 34px;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 20px;
+      align-items: end;
+      padding: 22px 0;
+      animation: rise 520ms ease both;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(26px, 4vw, 40px);
+      letter-spacing: 0;
+    }
+    p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    button {
+      min-height: 40px;
+      border: 0;
+      border-radius: 8px;
+      padding: 0 16px;
+      background: var(--accent);
+      color: #fff7ed;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
+    }
+    button:hover {
+      transform: translateY(-1px);
+      background: var(--accent-strong);
+      box-shadow: 0 12px 24px rgba(234, 88, 12, 0.20);
+    }
+    button:disabled {
+      cursor: progress;
+      opacity: 0.65;
+      transform: none;
+      box-shadow: none;
+    }
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .ghost {
+      background: #ffedd5;
+      color: var(--accent-strong);
+    }
+    .ghost:hover {
+      background: #fed7aa;
+    }
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 14px;
+      margin: 8px 0 18px;
+    }
+    .metric, .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+    .metric {
+      padding: 16px;
+      animation: rise 520ms ease both;
+    }
+    .metric:nth-child(2) { animation-delay: 60ms; }
+    .metric:nth-child(3) { animation-delay: 120ms; }
+    .metric:nth-child(4) { animation-delay: 180ms; }
+    .metric .label {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .metric .value {
+      margin-top: 8px;
+      font-size: 20px;
+      font-weight: 900;
+      overflow-wrap: anywhere;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .tabs {
+      position: sticky;
+      top: 16px;
+      padding: 10px;
+      animation: rise 560ms ease both;
+    }
+    .tab {
+      width: 100%;
+      justify-content: flex-start;
+      margin: 4px 0;
+      background: transparent;
+      color: var(--muted);
+      text-align: left;
+    }
+    .tab:hover, .tab.active {
+      background: #ffedd5;
+      color: var(--accent-strong);
+      box-shadow: none;
+    }
+    .content {
+      display: grid;
+      gap: 16px;
+    }
+    .panel {
+      overflow: hidden;
+      animation: rise 620ms ease both;
+    }
+    .panel header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 247, 237, 0.62);
+    }
+    .panel h2 {
+      margin: 0;
+      font-size: 19px;
+      letter-spacing: 0;
+    }
+    .panel .hint {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .fields {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+      padding: 18px 20px 20px;
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+    .field {
+      display: grid;
+      gap: 8px;
+      min-width: 0;
+    }
+    .field label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-weight: 850;
+      font-size: 14px;
+    }
+    .key {
+      color: var(--muted);
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-strong);
+      color: var(--text);
+      font: inherit;
+      outline: none;
+      transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+    }
+    input, select {
+      min-height: 40px;
+      padding: 0 12px;
+    }
+    textarea {
+      min-height: 132px;
+      padding: 12px;
+      resize: vertical;
+      line-height: 1.55;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--line-strong);
+      box-shadow: 0 0 0 4px rgba(251, 146, 60, 0.16);
+      transform: translateY(-1px);
+    }
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 42px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-strong);
+    }
+    .switch {
+      position: relative;
+      width: 46px;
+      height: 26px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      inset: 0;
+      border-radius: 999px;
+      background: #fdba74;
+      transition: background 180ms ease;
+    }
+    .slider::before {
+      content: "";
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      left: 3px;
+      top: 3px;
+      border-radius: 50%;
+      background: #fff7ed;
+      transition: transform 180ms ease;
+      box-shadow: 0 2px 8px rgba(67, 20, 7, 0.25);
+    }
+    .switch input:checked + .slider {
+      background: var(--accent);
+    }
+    .switch input:checked + .slider::before {
+      transform: translateX(20px);
+    }
+    .field-hint {
+      min-height: 18px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      max-width: 360px;
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: var(--text);
+      color: #fff7ed;
+      box-shadow: var(--shadow);
+      transform: translateY(18px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    .toast.ok { background: var(--ok); }
+    .toast.error { background: var(--danger); }
+    .fade {
+      opacity: 0.35;
+      transform: translateY(4px);
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(14px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (max-width: 760px) {
+      main {
+        width: min(100% - 20px, 1180px);
+        padding-top: 18px;
+      }
+      .hero {
+        grid-template-columns: 1fr;
+      }
+      .toolbar {
+        justify-content: stretch;
+      }
+      .toolbar button {
+        flex: 1;
+      }
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .tabs {
+        position: static;
+        display: flex;
+        overflow-x: auto;
+      }
+      .tab {
+        white-space: nowrap;
+      }
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c0f08;
+        --surface: rgba(67, 20, 7, 0.82);
+        --surface-strong: #2b1509;
+        --line: #9a3412;
+        --line-strong: #fb923c;
+        --text: #ffedd5;
+        --muted: #fdba74;
+        --shadow: 0 18px 44px rgba(0, 0, 0, 0.26);
+      }
+      body {
+        background:
+          radial-gradient(circle at 12% 8%, rgba(251, 146, 60, 0.18), transparent 28%),
+          radial-gradient(circle at 82% 18%, rgba(234, 88, 12, 0.18), transparent 26%),
+          linear-gradient(135deg, #1c0f08 0%, #2b1509 62%, #431407 100%);
+      }
+      .ghost, .tab:hover, .tab.active {
+        background: rgba(253, 186, 116, 0.15);
+      }
+      .panel header {
+        background: rgba(67, 20, 7, 0.65);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <div>
+        <h1>火山语音控制台</h1>
+        <p>查看 ASR、转码、情绪判断与 LivingMemory 状态，并直接调整插件配置。保存后配置会写回 AstrBot 插件配置。</p>
+      </div>
+      <div class="toolbar">
+        <button class="ghost" id="reload">刷新</button>
+        <button id="save">保存配置</button>
+      </div>
+    </section>
+
+    <section class="status-grid">
+      <div class="metric"><div class="label">鉴权</div><div class="value" id="auth_configured">读取中</div></div>
+      <div class="metric"><div class="label">提交模式</div><div class="value" id="submit_mode">读取中</div></div>
+      <div class="metric"><div class="label">转码</div><div class="value" id="enable_transcode">读取中</div></div>
+      <div class="metric"><div class="label">情绪判断</div><div class="value" id="emotion_enabled">读取中</div></div>
+    </section>
+
+    <section class="layout">
+      <nav class="tabs panel" id="tabs"></nav>
+      <section class="content" id="content"></section>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const groups = [
+      { id: 'auth', title: '鉴权与接口', keys: ['api_key', 'app_key', 'access_key', 'resource_id', 'endpoint', 'uid'] },
+      { id: 'audio', title: '音频与转码', keys: ['submit_mode', 'max_audio_mb', 'timeout_seconds', 'enable_transcode', 'prefer_bundled_ffmpeg', 'ffmpeg_path', 'transcode_output_format', 'transcode_sample_rate', 'transcode_channels'] },
+      { id: 'recognition', title: '识别参数', keys: ['enable_itn', 'enable_punc', 'enable_ddc', 'enable_speaker_info'] },
+      { id: 'inject', title: '注入与回复', keys: ['auto_recognize', 'inject_as_user_input', 'voice_prompt_template', 'inject_on_unclear_voice', 'unclear_voice_prompt', 'reply_transcription', 'reply_template', 'stop_event_after_recognition', 'send_empty_result_message'] },
+      { id: 'scope', title: '触发与排查', keys: ['enable_private', 'enable_group', 'only_when_at_or_wake', 'ignore_self', 'notify_config_error', 'notify_asr_error', 'show_logid'] },
+      { id: 'emotion', title: '情绪判断', keys: ['enable_emotion_analysis', 'emotion_model_id', 'emotion_context_turns', 'emotion_max_respect_weight_percent', 'emotion_timeout_seconds', 'emotion_fail_open', 'emotion_prompt_template'] }
+    ];
+
+    let fields = [];
+    let activeGroup = groups[0].id;
+    let saving = false;
+
+    const $ = (id) => document.getElementById(id);
+    const yesNo = (value) => value ? '启用' : '关闭';
+    const configured = (value) => value ? '已配置' : '未配置';
+
+    async function apiGet(path) {
+      const bridge = window.AstrBotPluginPage;
+      if (bridge && typeof bridge.apiGet === 'function') {
+        if (typeof bridge.ready === 'function') await bridge.ready();
+        return bridge.apiGet(path);
+      }
+      return fetch(`/api/plug/astrbot_plugin_volcengine_asr/${path}`).then((response) => response.json());
+    }
+
+    async function apiPost(path, body) {
+      const bridge = window.AstrBotPluginPage;
+      if (bridge && typeof bridge.apiPost === 'function') {
+        if (typeof bridge.ready === 'function') await bridge.ready();
+        return bridge.apiPost(path, body);
+      }
+      return fetch(`/api/plug/astrbot_plugin_volcengine_asr/${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }).then((response) => response.json());
+    }
+
+    function setText(id, value) {
+      const node = $(id);
+      if (node) node.textContent = value;
+    }
+
+    function showToast(message, type = 'ok') {
+      const toast = $('toast');
+      toast.className = `toast ${type} show`;
+      toast.textContent = message;
+      window.clearTimeout(showToast.timer);
+      showToast.timer = window.setTimeout(() => toast.classList.remove('show'), 2600);
+    }
+
+    function renderStatus(status) {
+      setText('auth_configured', configured(status.auth_configured));
+      setText('submit_mode', status.submit_mode || '-');
+      setText('enable_transcode', yesNo(status.enable_transcode));
+      setText('emotion_enabled', yesNo(status.emotion && status.emotion.enabled));
+    }
+
+    function renderTabs() {
+      $('tabs').innerHTML = groups.map((group) => (
+        `<button class="tab ${group.id === activeGroup ? 'active' : ''}" data-tab="${group.id}">${group.title}</button>`
+      )).join('');
+      document.querySelectorAll('.tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+          activeGroup = tab.dataset.tab;
+          renderTabs();
+          renderFields(true);
+        });
+      });
+    }
+
+    function inputHtml(field) {
+      const value = field.value ?? field.default ?? '';
+      if (field.type === 'bool') {
+        return `
+          <div class="switch-row">
+            <span>${value ? '启用' : '关闭'}</span>
+            <label class="switch">
+              <input data-key="${field.key}" type="checkbox" ${value ? 'checked' : ''}>
+              <span class="slider"></span>
+            </label>
+          </div>
+        `;
+      }
+      if (field.options && field.options.length) {
+        return `
+          <select data-key="${field.key}">
+            ${field.options.map((option) => `<option value="${escapeAttr(option)}" ${String(option) === String(value) ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}
+          </select>
+        `;
+      }
+      if (String(value).length > 90 || field.key.endsWith('_template')) {
+        return `<textarea data-key="${field.key}">${escapeHtml(value)}</textarea>`;
+      }
+      const inputType = field.type === 'int' || field.type === 'float' ? 'number' : 'text';
+      return `<input data-key="${field.key}" type="${inputType}" value="${escapeAttr(value)}">`;
+    }
+
+    function renderFields(animated = false) {
+      const group = groups.find((item) => item.id === activeGroup) || groups[0];
+      const selected = fields.filter((field) => group.keys.includes(field.key));
+      const content = $('content');
+      if (animated) content.classList.add('fade');
+      window.setTimeout(() => {
+        content.innerHTML = `
+          <article class="panel">
+            <header>
+              <div>
+                <h2>${group.title}</h2>
+                <div class="hint">${selected.length} 个配置项</div>
+              </div>
+            </header>
+            <div class="fields">
+              ${selected.map((field) => `
+                <div class="field">
+                  <label><span>${escapeHtml(field.description || field.key)}</span><span class="key">${field.key}</span></label>
+                  ${inputHtml(field)}
+                  <div class="field-hint">${escapeHtml(field.hint || '')}</div>
+                </div>
+              `).join('')}
+            </div>
+          </article>
+        `;
+        bindSwitchLabels();
+        content.classList.remove('fade');
+      }, animated ? 150 : 0);
+    }
+
+    function bindSwitchLabels() {
+      document.querySelectorAll('input[type="checkbox"][data-key]').forEach((input) => {
+        input.addEventListener('change', () => {
+          const row = input.closest('.switch-row');
+          const label = row && row.querySelector('span');
+          if (label) label.textContent = input.checked ? '启用' : '关闭';
+        });
+      });
+    }
+
+    function collectValues() {
+      const values = {};
+      document.querySelectorAll('[data-key]').forEach((node) => {
+        const key = node.dataset.key;
+        if (!key) return;
+        if (node.type === 'checkbox') {
+          values[key] = node.checked;
+        } else if (node.type === 'number') {
+          values[key] = node.value === '' ? '' : Number(node.value);
+        } else {
+          values[key] = node.value;
+        }
+      });
+      return values;
+    }
+
+    async function load() {
+      try {
+        const data = await apiGet('config');
+        fields = data.config || [];
+        renderStatus(data.status || {});
+        renderTabs();
+        renderFields(false);
+      } catch (error) {
+        showToast(`读取失败：${error && error.message ? error.message : error}`, 'error');
+      }
+    }
+
+    async function save() {
+      if (saving) return;
+      saving = true;
+      $('save').disabled = true;
+      try {
+        const data = await apiPost('config', { values: collectValues() });
+        if (!data.ok) throw new Error(data.error || '保存失败');
+        fields = data.config || fields;
+        renderStatus(data.status || {});
+        renderFields(false);
+        showToast(data.message || '配置已保存');
+      } catch (error) {
+        showToast(`保存失败：${error && error.message ? error.message : error}`, 'error');
+      } finally {
+        saving = false;
+        $('save').disabled = false;
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+      }[char]));
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value).replace(/`/g, '&#096;');
+    }
+
+    $('reload').addEventListener('click', load);
+    $('save').addEventListener('click', save);
+    load();
+  </script>
+</body>
+</html>

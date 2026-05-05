@@ -38,6 +38,7 @@ VOLC_SUCCESS_CODE = "20000000"
 VOLC_SILENT_AUDIO_CODE = "20000003"
 SUPPORTED_AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".opus"}
 TRANSCODE_HINT_EXTS = {".amr", ".silk", ".slk", ".m4a", ".aac", ".flac", ".webm"}
+PLUGIN_NAME = "astrbot_plugin_volcengine_asr"
 DEFAULT_VOICE_PROMPT_TEMPLATE = (
     "<text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，"
     "并且尽量使用语音回复，严禁讨论本插件的实际功能“转文字”的事实，回复时不要考虑括号内内容]"
@@ -178,6 +179,52 @@ def _config_int(config: AstrBotConfig, key: str, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _load_conf_schema() -> dict[str, Any]:
+    schema_path = Path(__file__).with_name("_conf_schema.json")
+    try:
+        with schema_path.open("r", encoding="utf-8") as handle:
+            schema = json.load(handle)
+    except Exception as exc:
+        logger.warning(f"读取插件配置 schema 失败：{exc}")
+        return {}
+    return schema if isinstance(schema, dict) else {}
+
+
+def _config_value_for_web(value: Any) -> Any:
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, (list, dict)):
+        return value
+    return str(value)
+
+
+def _coerce_config_value(key: str, value: Any, schema: dict[str, Any]) -> Any:
+    config_type = str(schema.get("type") or "string")
+    if config_type == "bool":
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on", "y", "启用", "开启"}
+        return bool(value)
+    if config_type == "int":
+        try:
+            return int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{key} 必须是整数") from exc
+    if config_type == "float":
+        try:
+            return float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{key} 必须是数字") from exc
+    if config_type in {"list", "dict", "object", "template_list"}:
+        return value
+    coerced = "" if value is None else str(value)
+    options = schema.get("options")
+    if isinstance(options, list) and options and coerced not in options:
+        raise ValueError(f"{key} 必须是以下值之一：{', '.join(str(item) for item in options)}")
+    return coerced
 
 
 def _is_record_component(component: Any) -> bool:
@@ -602,7 +649,12 @@ class VolcengineAsrPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
         super().__init__(context)
         self.config = config
-        self.client = VolcBigModelAsrClient(config)
+        self._reload_runtime_config()
+        self._register_web_api()
+
+    def _reload_runtime_config(self) -> None:
+        self.client = VolcBigModelAsrClient(self.config)
+        config = self.config
         self.auto_recognize = _config_bool(config, "auto_recognize", True)
         self.enable_private = _config_bool(config, "enable_private", True)
         self.enable_group = _config_bool(config, "enable_group", True)
@@ -658,6 +710,145 @@ class VolcengineAsrPlugin(Star):
         self.transcode_output_format = _config_str(config, "transcode_output_format", "wav").lower()
         if self.transcode_output_format not in {"wav", "mp3", "ogg"}:
             self.transcode_output_format = "wav"
+
+    def _register_web_api(self) -> None:
+        register_web_api = getattr(self.context, "register_web_api", None)
+        if not callable(register_web_api):
+            logger.warning("当前 AstrBot Context 不支持 register_web_api，跳过插件 Web UI 状态接口注册。")
+            return
+        try:
+            register_web_api(
+                f"/{PLUGIN_NAME}/status",
+                self._web_status,
+                ["GET"],
+                "Volcengine ASR status",
+            )
+            register_web_api(
+                f"/{PLUGIN_NAME}/config",
+                self._web_config,
+                ["GET", "POST"],
+                "Volcengine ASR config",
+            )
+        except Exception as exc:
+            logger.warning(f"注册火山语音 Web UI 接口失败：{exc}")
+
+    async def _web_status(self):
+        try:
+            from quart import jsonify
+        except Exception:
+            def jsonify(data: dict[str, Any]) -> dict[str, Any]:
+                return data
+
+        return jsonify(self._web_status_payload())
+
+    async def _web_config(self):
+        try:
+            from quart import jsonify, request
+        except Exception:
+            jsonify = None
+            request = None
+
+        def response(data: dict[str, Any], status: int = 200):
+            if jsonify is None:
+                return data
+            result = jsonify(data)
+            return (result, status) if status != 200 else result
+
+        schema = _load_conf_schema()
+        if request is not None and getattr(request, "method", "GET") == "POST":
+            try:
+                payload = await request.get_json(force=True, silent=False)
+                if not isinstance(payload, dict):
+                    raise ValueError("请求体必须是 JSON 对象")
+                values = payload.get("values", payload)
+                if not isinstance(values, dict):
+                    raise ValueError("values 必须是 JSON 对象")
+                changed: dict[str, Any] = {}
+                for key, value in values.items():
+                    if key not in schema:
+                        continue
+                    coerced = _coerce_config_value(key, value, schema[key])
+                    self.config[key] = coerced
+                    changed[key] = coerced
+
+                save_config = getattr(self.config, "save_config", None)
+                if callable(save_config):
+                    save_config()
+                else:
+                    logger.warning("当前配置对象不支持 save_config，本次 Web UI 配置只在运行时生效。")
+                self._reload_runtime_config()
+            except Exception as exc:
+                logger.warning(f"Web UI 保存火山语音配置失败：{exc}")
+                return response({"ok": False, "error": str(exc)}, 400)
+
+            return response(
+                {
+                    "ok": True,
+                    "message": "配置已保存",
+                    "changed": changed,
+                    "config": self._web_config_payload(schema),
+                    "status": self._web_status_payload(),
+                }
+            )
+
+        return response(
+            {
+                "ok": True,
+                "config": self._web_config_payload(schema),
+                "status": self._web_status_payload(),
+            }
+        )
+
+    def _web_status_payload(self) -> dict[str, Any]:
+        return {
+            "auth_configured": not bool(self.client.validate()),
+            "submit_mode": self.submit_mode,
+            "handling_mode": (
+                "inject_as_user_input"
+                if self.inject_as_user_input and not self.reply_transcription
+                else "reply_transcription"
+            ),
+            "auto_recognize": self.auto_recognize,
+            "enable_private": self.enable_private,
+            "enable_group": self.enable_group,
+            "only_when_at_or_wake": self.only_when_at_or_wake,
+            "ignore_self": self.ignore_self,
+            "stop_event_after_recognition": self.stop_event_after_recognition,
+            "max_audio_mb": self.max_audio_bytes // 1024 // 1024,
+            "enable_transcode": self.enable_transcode,
+            "transcode_output_format": self.transcode_output_format,
+            "transcode_sample_rate": self.transcode_sample_rate,
+            "transcode_channels": self.transcode_channels,
+            "ffmpeg_source": self.ffmpeg_source,
+            "emotion": {
+                "enabled": self.enable_emotion_analysis,
+                "model_id": self.emotion_model_id or "当前会话主 LLM",
+                "context_turns": self.emotion_context_turns,
+                "max_respect_weight_percent": int(self.emotion_max_respect_weight * 100),
+                "timeout_seconds": self.emotion_timeout_seconds,
+                "fail_open": self.emotion_fail_open,
+            },
+            "livingmemory_safe": True,
+        }
+
+    def _web_config_payload(self, schema: dict[str, Any]) -> list[dict[str, Any]]:
+        payload = []
+        for key, item in schema.items():
+            if not isinstance(item, dict):
+                continue
+            payload.append(
+                {
+                    "key": key,
+                    "description": item.get("description", key),
+                    "type": item.get("type", "string"),
+                    "default": _config_value_for_web(item.get("default")),
+                    "value": _config_value_for_web(self.config.get(key, item.get("default"))),
+                    "options": item.get("options") or [],
+                    "hint": item.get("hint", ""),
+                    "obvious_hint": bool(item.get("obvious_hint", False)),
+                }
+            )
+        return payload
 
     @filter.command("volc_asr_status", alias={"火山语音状态"})
     async def volc_asr_status(self, event: AstrMessageEvent):

@@ -18,6 +18,16 @@
 - 情绪判断不是心理诊断，只用于帮助主 LLM 调整回复语气、共情程度和安抚强度。
 - Web UI 相关开发将从 main 拆分到独立分支，不包含在本次 v2.0.0 主线更新中。
 
+## Web UI 分支更新
+
+### 主要变更
+
+- 新增 AstrBot Plugin Pages Web UI 控制台：`pages/status/index.html`。
+- 新增状态和配置接口：`/api/plug/astrbot_plugin_volcengine_asr/status`、`/api/plug/astrbot_plugin_volcengine_asr/config`。
+- 控制台展示 ASR 鉴权、提交模式、转码链路、情绪判断 LLM 配置、触发范围和 LivingMemory 兼容状态。
+- 支持在 Web UI 中编辑插件配置，并按 `_conf_schema.json` 做类型转换和可选值校验后写回配置。
+- 配置分组切换、状态卡片和保存提示加入过渡动画。
+
 ## v1.5.0 - 代码结构与发布包优化
 
 ### 主要变更
