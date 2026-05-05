@@ -1,0 +1,74 @@
+name: fuck-u-code
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    paths:
+      - "**/*.py"
+      - "**/*.json"
+      - "**/*.yaml"
+      - "**/*.yml"
+      - "README.md"
+      - "CHANGELOG.md"
+      - ".fuckucoderc.json"
+      - ".github/workflows/fuck-u-code.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "0 20 * * 0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuck-u-code-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Run fuck-u-code analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Prepare report directory
+        run: mkdir -p reports
+
+      - name: Analyze code quality
+        id: analyze
+        continue-on-error: true
+        run: |
+          npx -y -p eff-u-code fuck-u-code analyze . \
+            --format markdown \
+            --output reports/fuck-u-code-report.md \
+            --locale zh \
+            --top 20
+
+      - name: Add report to job summary
+        if: always()
+        run: |
+          if [ -f reports/fuck-u-code-report.md ]; then
+            cat reports/fuck-u-code-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "fuck-u-code did not produce a report." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuck-u-code-report
+          path: reports/fuck-u-code-report.md
+          if-no-files-found: ignore
+          retention-days: 14
