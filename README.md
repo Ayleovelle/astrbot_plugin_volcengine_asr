@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-1.4.8-brightgreen.svg" alt="Version 1.4.8">
+  <img src="https://img.shields.io/badge/Version-1.5.0-brightgreen.svg" alt="Version 1.5.0">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License MIT">
@@ -52,7 +52,7 @@
 
 | 项目 | 当前状态 |
 | :--- | :--- |
-| 插件版本 | `1.4.8` |
+| 插件版本 | `1.5.0` |
 | AstrBot 版本 | `>=4.16,<5` |
 | Python 版本 | `3.10+` |
 | 默认平台 | `aiocqhttp` / OneBot v11 |
