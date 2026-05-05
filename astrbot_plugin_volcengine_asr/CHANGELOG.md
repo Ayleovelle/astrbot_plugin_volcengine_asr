@@ -1,5 +1,23 @@
 # 更新说明
 
+## v2.0.0 - 情绪判断 LLM
+
+### 主要变更
+
+- 新增可选的情绪判断 LLM 流程，默认关闭。语音转写成功后，插件可以额外请求一次 LLM，根据当前转写文本和可用上下文输出结构化情绪 JSON。
+- 新增本地量化公式，使用情绪分布的 Shannon entropy 确定性、情绪判断 LLM 自评置信度、文本/上下文证据强度计算 `respect_weight`，限制主 LLM 对情绪判断的参考程度。
+- 情绪判断结果只追加到主 LLM 的 `llm_text` 辅助提示，不写入 `event.message_str`、`message_obj.message_str` 或消息链，继续保证 LivingMemory 只记录干净转写文本。
+- 新增情绪判断配置项：`enable_emotion_analysis`、`emotion_model_id`、`emotion_context_turns`、`emotion_max_respect_weight_percent`、`emotion_timeout_seconds`、`emotion_fail_open`、`emotion_prompt_template`。
+- `/volc_asr_status` 增加情绪判断状态、模型选择和最大参考权重展示。
+- README 新增情绪判断模块说明，覆盖工作流、JSON 输出格式、理论依据、计算过程、主 LLM 辅助块示例和 LivingMemory 兼容边界。
+- helper 测试扩展，覆盖 JSON 解析、情绪权重归一化、熵确定性、参考权重计算、情绪提示词构造和主 LLM 辅助块追加。
+
+### 注意事项
+
+- 情绪判断默认关闭；开启后会增加一次额外 LLM 调用，带来 token 消耗、响应延迟和上下文暴露范围增加。
+- 情绪判断不是心理诊断，只用于帮助主 LLM 调整回复语气、共情程度和安抚强度。
+- Web UI 相关开发将从 main 拆分到独立分支，不包含在本次 v2.0.0 主线更新中。
+
 ## v1.5.0 - 代码结构与发布包优化
 
 ### 主要变更

@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-1.5.0-brightgreen.svg" alt="Version 1.5.0">
+  <img src="https://img.shields.io/badge/Version-2.0.0-brightgreen.svg" alt="Version 2.0.0">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License MIT">
@@ -38,13 +38,14 @@
 
 | 左列 | 右列 |
 | :--- | :--- |
-| 1. [插件定位](#插件定位) | 8. [完整配置说明](#完整配置说明) |
-| 2. [适合谁使用](#适合谁使用) | 9. [默认提示词与模板写法](#默认提示词与模板写法) |
-| 3. [核心特性](#核心特性) | 10. [LivingMemory 兼容机制](#livingmemory-兼容机制) |
-| 4. [运行流程](#运行流程) | 11. [命令与状态检查](#命令与状态检查) |
-| 5. [安装方式](#安装方式) | 12. [常见问题与排障](#常见问题与排障) |
-| 6. [火山引擎准备](#火山引擎准备) | 13. [目录结构与发布包说明](#目录结构与发布包说明) |
-| 7. [推荐配置](#推荐配置) | 14. [第三方组件与许可证](#第三方组件与许可证) |
+| 1. [插件定位](#插件定位) | 9. [情绪判断模块](#情绪判断模块) |
+| 2. [适合谁使用](#适合谁使用) | 10. [完整配置说明](#完整配置说明) |
+| 3. [核心特性](#核心特性) | 11. [默认提示词与模板写法](#默认提示词与模板写法) |
+| 4. [运行流程](#运行流程) | 12. [LivingMemory 兼容机制](#livingmemory-兼容机制) |
+| 5. [安装方式](#安装方式) | 13. [命令与状态检查](#命令与状态检查) |
+| 6. [火山引擎准备](#火山引擎准备) | 14. [常见问题与排障](#常见问题与排障) |
+| 7. [推荐配置](#推荐配置) | 15. [目录结构与发布包说明](#目录结构与发布包说明) |
+| 8. [情绪判断快速配置](#情绪判断快速配置) | 16. [第三方组件与许可证](#第三方组件与许可证) |
 
 ---
 
@@ -86,6 +87,7 @@
 | 自动转码 | 检测到 AMR、SILK、M4A、AAC、FLAC、WEBM 等格式时，可调用 `ffmpeg` 转为 WAV / MP3 / OGG。 |
 | Release 包内置 ffmpeg | Release zip 内置 Linux x86_64 / amd64 版 `ffmpeg`，适合 Docker / VPS。 |
 | LLM 友好 | 默认把转写文本注入为用户输入，让模型自然理解语音内容。 |
+| 情绪判断 LLM | 2.0.0 新增，可选地在主 LLM 回复前分析用户语音情绪，并以公式化权重影响主 LLM 语气。 |
 | LivingMemory 友好 | 消息阶段写入干净转写文本，LLM 请求阶段才套语音提示词，避免长期记忆被模板污染。 |
 | 可控触发范围 | 可分别控制私聊、群聊、仅被 @ 或唤醒时识别、是否忽略机器人自身消息。 |
 | 友好降级 | 静音、杂音、空结果时可让 LLM 自然地请用户重说。 |
@@ -103,10 +105,11 @@ QQ 语音 Record
   -> 必要时调用 ffmpeg 转码
   -> Base64 提交到火山引擎 ASR
   -> 得到纯转写文本
-  -> 消息事件阶段注入 Plain 文本
+  -> 可选：情绪判断 LLM 分析转写文本和上下文
+  -> 消息事件阶段只注入 Plain 纯文本
   -> LivingMemory 读取和存储干净文本
-  -> LLM 请求阶段套 voice_prompt_template
-  -> 模型生成自然回复
+  -> LLM 请求阶段套 voice_prompt_template 和情绪辅助信息
+  -> 主 LLM 按参考权重调整语气并生成回复
 ```
 
 对应流程图：
@@ -121,10 +124,16 @@ flowchart LR
     F --> E
     E --> G[火山引擎 ASR]
     G --> H[得到纯转写文本]
-    H --> I[改写事件为 Plain 文本]
-    I --> J[LivingMemory 检索和存储]
-    J --> K[LLM 请求阶段套语音提示词]
-    K --> L[LLM 生成回复]
+    H --> I{启用情绪判断?}
+    I -->|是| J[情绪判断 LLM 输出 JSON]
+    J --> K[插件公式计算参考权重]
+    I -->|否| L[跳过情绪增强]
+    K --> M[构造主 LLM 情绪辅助块]
+    L --> N[改写事件为 Plain 文本]
+    M --> N
+    N --> O[LivingMemory 检索和存储纯文本]
+    O --> P[LLM 请求阶段套语音提示词]
+    P --> Q[主 LLM 生成回复]
 ```
 
 这个顺序很重要：记忆插件读到的是用户实际说的话，而不是“请尽量使用语音回复”这类提示词包装。
@@ -260,7 +269,213 @@ only_when_at_or_wake = true
 
 这样可以减少无关语音触发，也能降低调用火山接口的成本。
 
-## 完整配置说明
+## 情绪判断快速配置
+
+2.0.0 新增的情绪判断模块默认关闭。如果你希望主 LLM 在回复语音消息时更敏感地理解用户当前状态，可以按下面方式开启：
+
+```text
+enable_emotion_analysis = true
+emotion_model_id = ""
+emotion_context_turns = 4
+emotion_max_respect_weight_percent = 60
+emotion_fail_open = true
+```
+
+说明：
+
+- `emotion_model_id` 留空时，插件会尝试使用当前会话的主 LLM 作为情绪判断 LLM。
+- 如果后续 AstrBot 暴露可稳定枚举的模型列表，可以在这里填写指定模型 ID，让情绪判断走更便宜或更快的模型。
+- `emotion_max_respect_weight_percent` 建议保持在 `30-70`。它不是情绪置信度，而是“主 LLM 最多应该在多大程度上参考情绪判断”的上限。
+- `emotion_fail_open=true` 时，即使情绪判断模型超时、报错或输出 JSON 不合法，语音转写仍会按原流程进入主 LLM。
+
+> [!WARNING]
+> 情绪判断会额外请求一次 LLM，因此会增加 token 消耗、响应延迟和上下文暴露范围。它只用于调整回复语气，不是心理诊断，也不应该覆盖用户明确表达的请求。
+
+## 情绪判断模块
+
+情绪判断模块是 2.0.0 的核心更新。它的目标不是“判断用户真实心理状态”，而是在用户发语音时，给主 LLM 一个结构化、带权重、可忽略的语气参考。
+
+### 模块解决什么问题
+
+语音消息比文字多了一层表达语境：用户可能是在抱怨、撒娇、焦虑、兴奋、困惑，也可能只是普通陈述。ASR 只能给出文字，不会直接告诉主 LLM“这个语音听起来该被温柔对待还是正常回答”。
+
+本模块在 ASR 得到纯转写文本后，额外调用一次情绪判断 LLM，让它输出结构化 JSON。插件随后用本地公式计算 `respect_weight`，再把结果追加到主 LLM 的提示词里。主 LLM 可以根据该权重调整语气、安抚强度和共情程度，但不能把情绪判断当成事实。
+
+### 完整工作流
+
+```text
+1. 用户发送 QQ 语音。
+2. 插件通过火山引擎 ASR 得到纯转写文本。
+3. 如果 enable_emotion_analysis=false：
+   - 直接走原来的 LivingMemory 友好注入流程。
+4. 如果 enable_emotion_analysis=true：
+   - 插件构造情绪判断 prompt。
+   - 情绪判断 LLM 读取当前语音转写和可用上下文。
+   - 情绪判断 LLM 只允许输出 JSON。
+   - 插件解析 JSON，清洗情绪标签和权重。
+   - 插件用 Shannon entropy、LLM 置信度、文本证据强度计算 respect_weight。
+   - 插件把情绪结果作为辅助块追加到主 LLM prompt。
+5. 消息事件阶段仍然只把纯转写文本写入 event.message_str。
+6. LivingMemory 仍然只读取和存储干净文本。
+7. 主 LLM 最终看到：语音提示词 + 情绪辅助信息 + 原本上下文。
+8. 主 LLM 按参考权重调整语气并回复。
+```
+
+关键点：情绪判断结果不会写入 `event.message_str`，也不会写入 `message_obj.message_str`。LivingMemory 看到的仍然是用户原话的纯转写文本。
+
+### 情绪判断 LLM 输出格式
+
+情绪判断 LLM 必须输出 JSON，例如：
+
+```json
+{
+  "label": "anxious",
+  "emotion_weights": {
+    "anxious": 0.62,
+    "sad": 0.18,
+    "neutral": 0.12
+  },
+  "confidence": 0.71,
+  "valence": -0.45,
+  "arousal": 0.68,
+  "voice_text_support": 0.75,
+  "context_support": 0.40,
+  "reason": "用户表达了担心和不确定，但没有明显愤怒。"
+}
+```
+
+字段解释：
+
+| 字段 | 含义 |
+| :--- | :--- |
+| `label` | 主情绪标签。当前支持 `neutral`、`happy`、`sad`、`angry`、`anxious`、`frustrated`、`excited`、`confused`、`tired`。 |
+| `emotion_weights` | 情绪分布。插件会裁剪到 `[0,1]`，总和超过 1 时会重新归一化。 |
+| `confidence` | 情绪判断 LLM 对自己判断的置信度，只是输入信号之一，不会被完全信任。 |
+| `valence` | 效价，范围 `[-1,1]`。负值偏不愉快，正值偏愉快。 |
+| `arousal` | 唤醒度，范围 `[0,1]`。越高表示情绪越激活、越强烈。 |
+| `voice_text_support` | 当前语音转写文本本身对该判断的支持度。 |
+| `context_support` | 上下文对该判断的支持度。 |
+| `reason` | 一句话短解释，不需要链式思考。 |
+
+如果模型输出不是合法 JSON，或字段无法解析，插件会跳过情绪增强，并继续正常语音转写流程。
+
+### 理论依据
+
+本模块采用“维度情绪 + 分类情绪 + 不确定性校准”的混合方案：
+
+1. **Russell 环状情绪模型**
+   Russell 的 Circumplex Model of Affect 将情绪放在二维空间中理解：`valence` 表示愉快/不愉快，`arousal` 表示激活/平静。这样比只给一个“开心/难过”标签更细，因为“愤怒”和“焦虑”都可能是负效价高唤醒，而“疲惫”更接近负效价低唤醒。
+
+2. **分类情绪标签**
+   主 LLM 实际调整回复时仍需要可读标签，所以插件保留 `anxious`、`sad`、`happy` 等离散情绪。标签负责“怎么说”，效价/唤醒度负责“强度和方向”。
+
+3. **Shannon entropy 不确定性**
+   如果情绪分布很集中，例如 `anxious=0.90, neutral=0.10`，说明分类结果更确定；如果分布很平，例如 `anxious=0.34, sad=0.33, neutral=0.33`，说明模型其实不确定。插件用 Shannon entropy 把这种不确定性转成 `certainty`。
+
+4. **置信度不直接等于参考权重**
+   LLM 自报的 `confidence` 可能过高或不稳定，所以插件不会直接把它当成主 LLM 的服从程度，而是把它和分类确定性、文本证据强度一起计算。
+
+5. **语境证据加权**
+   情绪不能只看一个词，也不能完全靠上下文脑补。因此插件默认更重视当前语音文本，较轻参考上下文：`voice_text_support` 权重 0.7，`context_support` 权重 0.3。
+
+### 计算过程
+
+插件先把情绪权重清洗成概率分布 `p`，再计算分类确定性：
+
+```text
+H(p) = -Σ p_i log(p_i)
+certainty = 1 - H(p) / log(N)
+```
+
+解释：
+
+- `H(p)` 是 Shannon entropy。
+- `N` 是非零情绪标签数量。
+- `certainty` 越接近 1，说明情绪分布越集中。
+- `certainty` 越接近 0，说明模型在多个情绪之间摇摆。
+
+然后计算证据强度：
+
+```text
+length_factor = min(1, log(1 + transcript_chars) / log(81))
+evidence = length_factor * (0.7 * voice_text_support + 0.3 * context_support)
+```
+
+解释：
+
+- 很短的语音文本信息量不足，例如“嗯”“啊？”“好吧”，即使模型给出高置信，也不应该让主 LLM 过度反应。
+- `length_factor` 会压低短文本的证据强度。
+- 当前语音文本比上下文更重要，所以权重是 0.7 / 0.3。
+
+最后计算主 LLM 参考权重：
+
+```text
+respect_weight = clamp(
+  max_respect_weight * (0.50 * confidence + 0.30 * certainty + 0.20 * evidence),
+  0,
+  max_respect_weight
+)
+```
+
+默认：
+
+```text
+max_respect_weight = 0.60
+```
+
+额外保护：
+
+- 如果转写文本少于 12 个字符，`respect_weight` 最高压到 `0.25`。
+- 如果语音未听清，不进行情绪判断。
+- 如果 JSON 解析失败，不进行情绪增强。
+- 如果情绪判断 LLM 调用失败，默认 fail-open，继续普通 ASR 流程。
+
+### 主 LLM 最终看到什么
+
+主 LLM 不会收到情绪判断 LLM 的原始长输出，而是收到插件整理后的辅助块：
+
+```text
+[情绪判断辅助信息]
+- 推测情绪：anxious
+- 情绪分布：anxious=0.62, sad=0.18, neutral=0.12
+- 置信度：0.71
+- 效价 valence：-0.45
+- 唤醒度 arousal：0.68
+- 建议参考权重：0.42
+- 简短依据：用户表达了担心和不确定，但没有明显愤怒。
+
+请只按该权重调整语气、共情程度和安抚强度。不要把该判断当作事实，不要替用户断言情绪，不要覆盖用户明确表达的请求。
+```
+
+这里最重要的是最后一句限制：情绪结果只是语气参考，不是事实，也不是命令。用户明确提出的需求永远优先。
+
+### 模型选择与回退
+
+`emotion_model_id` 是预留的模型选择接口：
+
+- 留空：使用当前会话主 LLM。
+- 填写模型 ID：尝试使用指定 AstrBot 模型。
+- 当前 AstrBot 环境不支持指定模型或 LLM 调用失败：按 `emotion_fail_open` 决定是否跳过。
+
+推荐做法：
+
+- 如果你追求稳定，先留空，用主 LLM 判断。
+- 如果你希望降低成本，后续可以选择更便宜、更快的小模型做情绪判断。
+- 如果你不希望额外消耗 token，保持 `enable_emotion_analysis=false`。
+
+### 与 LivingMemory 的关系
+
+情绪判断模块只影响主 LLM prompt，不影响 LivingMemory 存储内容。
+
+| 阶段 | 内容 |
+| :--- | :--- |
+| 消息事件阶段 | 只写入纯转写文本。 |
+| LivingMemory 读取阶段 | 只看到用户语音的干净转写。 |
+| LLM 请求阶段 | 才追加语音提示词和情绪辅助信息。 |
+| 长期记忆结果 | 不会保存 `anxious=0.62`、`respect_weight=0.42` 这类分析文本。 |
+
+这样做是为了避免长期记忆被模型分析、插件提示词、情绪标签污染。
+
 
 > 本插件使用 AstrBot 原生插件配置页。下面按功能分组解释每一个配置项。
 
@@ -628,7 +843,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q -p no:cache
 
 ## 版本说明
 
-当前版本：`1.5.0`
+当前版本：`2.0.0`
 
 本版本重点：
 
