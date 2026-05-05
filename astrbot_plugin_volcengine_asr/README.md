@@ -56,14 +56,14 @@
 | AstrBot 版本 | `>=4.16,<5` |
 | Python 版本 | `3.10+` |
 | 默认平台 | `aiocqhttp` / OneBot v11 |
-| 主要依赖 | `httpx`，仓库安装时额外使用 `imageio-ffmpeg` 兜底 |
+| 主要依赖 | Release zip 依赖 `httpx` 并优先使用内置 `ffmpeg`；仓库安装额外使用 `imageio-ffmpeg` 兜底 |
 | 火山资源 ID | `volc.bigasr.auc_turbo` |
 
 ## 安装
 
 ### 方式一：上传 Release 压缩包
 
-推荐优先使用这种方式。它带有内置 `ffmpeg`，适合不方便在 VPS、Docker 或云应用里手动安装转码工具的环境。
+推荐优先使用这种方式。它带有内置 `ffmpeg`，适合不方便在 VPS、Docker 或云应用里手动安装转码工具的环境。不要使用 GitHub 页面绿色 Code 按钮下载的源码 zip 代替 Release zip。
 
 1. 打开 [GitHub Releases](https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr/releases/latest)。
 2. 下载 `astrbot_plugin_volcengine_asr.zip`。
@@ -94,7 +94,7 @@ bin/linux-x86_64/ffmpeg
 https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr
 ```
 
-仓库根目录已提供 `metadata.yaml`、`main.py`、`_conf_schema.json` 和 `requirements.txt`，可以被 AstrBot 直接识别。仓库安装不会带 Release zip 中的内置 `bin/linux-x86_64/ffmpeg`，所以根目录依赖会安装 `imageio-ffmpeg` 作为转码兜底。
+仓库根目录已提供 `metadata.yaml`、`main.py`、`_conf_schema.json` 和 `requirements.txt`，可以被 AstrBot 直接识别。仓库安装不会带 Release zip 中的内置 `bin/linux-x86_64/ffmpeg`，所以根目录依赖会安装 `imageio-ffmpeg` 作为转码兜底；如果你的环境禁止安装 Python 依赖，请改用 Release zip 或手动配置系统 `ffmpeg`。
 
 ### 方式三：手动放入插件目录
 
@@ -169,7 +169,7 @@ flowchart LR
 | `app_key` | 空 | 旧版控制台 App Key。 |
 | `access_key` | 空 | 旧版控制台 Access Key。 |
 | `resource_id` | `volc.bigasr.auc_turbo` | 大模型录音文件极速版资源 ID。 |
-| `endpoint` | 火山官方接口地址 | 通常不需要改。 |
+| `endpoint` | `https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash` | 火山官方接口地址，通常不需要改。 |
 | `uid` | 空 | 留空时自动使用 `api_key`、`app_key` 或 `astrbot`。 |
 
 ### 音频提交与转码
@@ -182,6 +182,9 @@ flowchart LR
 | `enable_transcode` | `true` | 开启自动转码。 |
 | `prefer_bundled_ffmpeg` | `true` | 优先使用插件内置 `ffmpeg`。 |
 | `ffmpeg_path` | `auto` | 可改为系统 `ffmpeg` 绝对路径。 |
+
+当 `prefer_bundled_ffmpeg=true` 且 `ffmpeg_path=auto` 或 `ffmpeg` 时，插件会按顺序尝试：Release zip 内置 `bin/linux-x86_64/ffmpeg`、`imageio-ffmpeg`、系统 PATH 中的 `ffmpeg`。
+
 | `transcode_output_format` | `wav` | 可选 `wav`、`mp3`、`ogg`。 |
 | `transcode_sample_rate` | `16000` | 语音识别场景推荐 16000。 |
 | `transcode_channels` | `1` | 推荐单声道。 |
@@ -205,7 +208,9 @@ flowchart LR
 | `inject_on_unclear_voice` | `true` | 空结果或静音时也注入“没听清”提示。 |
 | `unclear_voice_prompt` | 默认没听清模板 | 只在 `inject_on_unclear_voice=true` 时生效。 |
 | `reply_transcription` | `false` | 调试用。开启后直接回复转写结果。 |
+| `stop_event_after_recognition` | `true` | 直接回复或报错后停止事件继续传递，避免后续插件重复处理。 |
 | `reply_template` | `语音转文字：{text}` | 仅在直接回复模式下使用。 |
+| `send_empty_result_message` | `true` | 直接回复模式下，静音或空结果时发送提示；若 `inject_on_unclear_voice=true`，会优先注入没听清提示。 |
 
 ### 范围与排查
 
@@ -226,6 +231,8 @@ flowchart LR
 ```text
 <text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，严禁讨论本插件的实际功能“转文字”的事实，回复时不要考虑括号内内容]
 ```
+
+默认模板的目的，是让 LLM 把语音内容当作用户原话处理，而不是向用户暴露“语音转文字”的中间过程。`voice_prompt_template` 支持 `<text>` 和 `{text}`；如果你在自定义模板里需要字面量 `{` 或 `}`，请写成 `{{` 和 `}}`。
 
 偏向文字回复时，可以改成：
 

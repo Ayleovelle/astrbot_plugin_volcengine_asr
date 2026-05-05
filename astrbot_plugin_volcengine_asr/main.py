@@ -178,6 +178,11 @@ def _format_with_fallback(template: str, values: dict[str, Any]) -> str:
         return str(values.get("text", ""))
 
 
+def _render_prompt_template(template: str, values: dict[str, Any]) -> str:
+    template = template.replace("<text>", "{text}")
+    return _format_with_fallback(template, values).strip()
+
+
 def _replace_first_text(text: str, old: str, new: str) -> tuple[str, bool]:
     if not old or old not in text:
         return text, False
@@ -240,13 +245,6 @@ class VolcBigModelAsrClient:
         self.enable_punc = _config_bool(config, "enable_punc", True)
         self.enable_ddc = _config_bool(config, "enable_ddc", True)
         self.enable_speaker_info = _config_bool(config, "enable_speaker_info", False)
-        self.enable_transcode = _config_bool(config, "enable_transcode", True)
-        self.ffmpeg_path = _config_str(config, "ffmpeg_path", "ffmpeg") or "ffmpeg"
-        self.transcode_sample_rate = max(8000, _config_int(config, "transcode_sample_rate", 16000))
-        self.transcode_channels = max(1, _config_int(config, "transcode_channels", 1))
-        self.transcode_output_format = _config_str(config, "transcode_output_format", "wav").lower()
-        if self.transcode_output_format not in {"wav", "mp3", "ogg"}:
-            self.transcode_output_format = "wav"
         timeout = httpx.Timeout(self.timeout_seconds, connect=10.0)
         self._client = httpx.AsyncClient(timeout=timeout, follow_redirects=True)
 
@@ -532,6 +530,8 @@ class VolcengineAsrPlugin(Star):
         """在 livingmemory 处理完干净文本后，再把 LLM prompt 替换为语音模板。"""
         memory_text = event.get_extra(ASR_EXTRA_MEMORY_TEXT, "")
         llm_text = event.get_extra(ASR_EXTRA_LLM_TEXT, "")
+        if event.get_extra("volcengine_asr_llm_prompt_applied", False):
+            return
         if not isinstance(memory_text, str) or not isinstance(llm_text, str):
             return
         memory_text = memory_text.strip()
@@ -789,10 +789,7 @@ class VolcengineAsrPlugin(Star):
             "request_id": ",".join(item.request_id for item in results),
             "duration_ms": results[0].duration_ms or "" if len(results) == 1 else "",
         }
-        if "<text>" in template:
-            injected = template.replace("<text>", text)
-            return _format_with_fallback(injected, values).strip()
-        return _format_with_fallback(template, values).strip()
+        return _render_prompt_template(template, values)
 
     @staticmethod
     def _inject_user_text(
