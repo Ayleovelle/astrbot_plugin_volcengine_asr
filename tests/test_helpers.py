@@ -13,6 +13,7 @@ from astrbot_plugin_volcengine_asr.main import (
     _replace_first_text,
     _safe_parse_json_object,
 )
+from scripts.update_fuck_u_code_score import build_svg, extract_score, find_score, normalize_score
 
 
 def test_render_prompt_template_supports_angle_placeholder_with_braces_text():
@@ -177,3 +178,33 @@ def test_append_emotion_guidance_only_changes_llm_text():
     assert "情绪判断辅助信息" in result
     assert "建议参考权重：0.40" in result
     assert _append_emotion_guidance("原始 LLM 文本", None) == "原始 LLM 文本"
+
+
+def test_extract_fuck_u_code_score_from_report_text():
+    report = """
+    # fuck-u-code report
+
+    总分：68.391
+    """
+
+    assert extract_score(report) == "68.39"
+
+
+def test_find_fuck_u_code_score_returns_none_without_score():
+    assert find_score("# report\nno numeric score here") is None
+
+
+def test_normalize_fuck_u_code_score_clamps_range():
+    assert normalize_score("-1") == "0.00"
+    assert normalize_score("102") == "100.00"
+    assert normalize_score("7") == "7.00"
+
+
+def test_build_fuck_u_code_svg_contains_score_and_bot_description():
+    svg = build_svg("68.39")
+
+    assert 'width="250"' in svg
+    assert 'height="54"' in svg
+    assert "github Actions bot" not in svg
+    assert "GitHub Actions bot" in svg
+    assert ">68.39<" in svg
