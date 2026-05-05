@@ -361,22 +361,22 @@ emotion_fail_open = true
 
 ### 理论依据
 
-本模块采用“维度情绪 + 分类情绪 + 不确定性校准”的混合方案：
+本模块采用“维度情绪 + 分类情绪 + 不确定性校准 + 语境评价”的混合方案。需要先说明边界：插件里的 `respect_weight` 是工程化融合公式，不是某篇心理学论文或机器学习论文的原样复现；它把下列可检索文献中的思想压缩成一个可控、可解释、默认保守的提示词权重。
 
 1. **Russell 环状情绪模型**
-   Russell 的 Circumplex Model of Affect 将情绪放在二维空间中理解：`valence` 表示愉快/不愉快，`arousal` 表示激活/平静。这样比只给一个“开心/难过”标签更细，因为“愤怒”和“焦虑”都可能是负效价高唤醒，而“疲惫”更接近负效价低唤醒。
+   Russell 的 Circumplex Model of Affect 将情绪放在二维空间中理解：`valence` 表示愉快/不愉快，`arousal` 表示激活/平静。这样比只给一个“开心/难过”标签更细，因为“愤怒”和“焦虑”都可能是负效价高唤醒，而“疲惫”更接近负效价低唤醒。该思路来自 Russell 对情绪词空间的二维建模，后续也被 Posner、Russell 与 Peterson 用于整合情感神经科学、认知发展和精神病理学研究。
 
 2. **分类情绪标签**
-   主 LLM 实际调整回复时仍需要可读标签，所以插件保留 `anxious`、`sad`、`happy` 等离散情绪。标签负责“怎么说”，效价/唤醒度负责“强度和方向”。
+   主 LLM 实际调整回复时仍需要可读标签，所以插件保留 `anxious`、`sad`、`happy` 等离散情绪。标签负责“怎么说”，效价/唤醒度负责“强度和方向”。这里借用了基础情绪研究中“离散标签有助于表达和识别”的工程价值，但不等同于完整采纳某一种基础情绪理论。
 
 3. **Shannon entropy 不确定性**
-   如果情绪分布很集中，例如 `anxious=0.90, neutral=0.10`，说明分类结果更确定；如果分布很平，例如 `anxious=0.34, sad=0.33, neutral=0.33`，说明模型其实不确定。插件用 Shannon entropy 把这种不确定性转成 `certainty`。
+   如果情绪分布很集中，例如 `anxious=0.90, neutral=0.10`，说明分类结果更确定；如果分布很平，例如 `anxious=0.34, sad=0.33, neutral=0.33`，说明模型其实不确定。插件用 Shannon 在信息论中提出的 entropy 形式，把情绪分布的不确定性转成 `certainty`。
 
 4. **置信度不直接等于参考权重**
-   LLM 自报的 `confidence` 可能过高或不稳定，所以插件不会直接把它当成主 LLM 的服从程度，而是把它和分类确定性、文本证据强度一起计算。
+   LLM 自报的 `confidence` 可能过高或不稳定，所以插件不会直接把它当成主 LLM 的服从程度，而是把它和分类确定性、文本证据强度一起计算。这个设计参考了现代神经网络校准研究中的基本结论：模型给出的概率或置信度不必然等于真实正确率，实际系统中需要额外校准或约束。
 
 5. **语境证据加权**
-   情绪不能只看一个词，也不能完全靠上下文脑补。因此插件默认更重视当前语音文本，较轻参考上下文：`voice_text_support` 权重 0.7，`context_support` 权重 0.3。
+   情绪不能只看一个词，也不能完全靠上下文脑补。认知评价理论强调情绪与个体对事件、责任、确定性、控制感等语境因素的评价有关。因此插件默认更重视当前语音文本，较轻参考上下文：`voice_text_support` 权重 0.7，`context_support` 权重 0.3。
 
 ### 计算过程
 
@@ -429,6 +429,20 @@ max_respect_weight = 0.60
 - 如果语音未听清，不进行情绪判断。
 - 如果 JSON 解析失败，不进行情绪增强。
 - 如果情绪判断 LLM 调用失败，默认 fail-open，继续普通 ASR 流程。
+
+### 可检索参考文献
+
+下面这些文献都可以在 Google Scholar 中按标题检索到：
+
+| 作用 | 文献 |
+| :--- | :--- |
+| `valence/arousal` 二维情绪空间 | Russell, J. A. (1980). [A circumplex model of affect](https://doi.org/10.1037/h0077714). *Journal of Personality and Social Psychology*, 39(6), 1161-1178. |
+| 环状情绪模型的神经科学与发展心理学综述 | Posner, J., Russell, J. A., & Peterson, B. S. (2005). [The circumplex model of affect: An integrative approach to affective neuroscience, cognitive development, and psychopathology](https://doi.org/10.1017/S0954579405050340). *Development and Psychopathology*, 17(3), 715-734. |
+| 离散情绪标签的基础情绪理论来源 | Ekman, P. (1992). [An argument for basic emotions](https://doi.org/10.1080/02699939208411068). *Cognition and Emotion*, 6(3-4), 169-200. |
+| entropy / 不确定性度量 | Shannon, C. E. (1948). [A mathematical theory of communication](https://doi.org/10.1002/j.1538-7305.1948.tb01338.x). *The Bell System Technical Journal*, 27(3), 379-423. |
+| 语境评价与情绪差异 | Smith, C. A., & Ellsworth, P. C. (1985). [Patterns of cognitive appraisal in emotion](https://doi.org/10.1037/0022-3514.48.4.813). *Journal of Personality and Social Psychology*, 48(4), 813-838. |
+| 评价理论的多层顺序检查模型 | Scherer, K. R. (2001). [Appraisal considered as a process of multilevel sequential checking](https://doi.org/10.1093/oso/9780195130072.003.0005). In *Appraisal Processes in Emotion: Theory, Methods, Research* (pp. 92-120). Oxford University Press. |
+| 现代神经网络置信度校准 | Guo, C., Pleiss, G., Sun, Y., & Weinberger, K. Q. (2017). [On calibration of modern neural networks](https://arxiv.org/abs/1706.04599). *Proceedings of ICML 2017*. |
 
 ### 主 LLM 最终看到什么
 
