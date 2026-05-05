@@ -1,11 +1,12 @@
-<!-- markdownlint-disable MD033 MD041 -->
+<!-- markdownlint-disable MD024 MD033 MD041 -->
 
 <p align="center">
   <img src="./assets/VoiceMountain.svg" alt="火山引擎语音转文字 AstrBot 插件" width="920">
 </p>
 
 <p align="center">
-
+  <sub>简洁扁平化头图：突出 QQ 语音识别、火山 ASR、纯文本注入和 LivingMemory 友好，并保留火山学者意象。</sub>
+</p>
 
 <p align="center">
   <img src="./assets/FuckUCodeScore.svg" alt="Fuck-U-Code 代码质量评分" width="250">
@@ -14,7 +15,7 @@
 <h1 align="center">AstrBot 火山引擎语音转文字插件</h1>
 
 <p align="center">
-  <strong>把 QQ 语音转成干净文本，再交给 AstrBot、LLM 和长期记忆系统继续处理。</strong>
+  <strong>让 QQ 语音像文字消息一样进入 AstrBot、LLM、TTS 和长期记忆流程。</strong>
 </p>
 
 <p align="center">
@@ -33,116 +34,82 @@
 
 ---
 
-## 这个插件的功能
+## 快速导航
 
-`astrbot_plugin_volcengine_asr` 是一个面向 AstrBot 的 QQ 语音识别插件。它会监听消息链中的 `Record` 语音段，读取或下载音频，必要时用 `ffmpeg` 转码，然后调用火山引擎豆包语音「大模型录音文件极速版识别 API」完成转写。
+| 左列 | 右列 |
+| :--- | :--- |
+| 1. [插件定位](#插件定位) | 8. [完整配置说明](#完整配置说明) |
+| 2. [适合谁使用](#适合谁使用) | 9. [默认提示词与模板写法](#默认提示词与模板写法) |
+| 3. [核心特性](#核心特性) | 10. [LivingMemory 兼容机制](#livingmemory-兼容机制) |
+| 4. [运行流程](#运行流程) | 11. [命令与状态检查](#命令与状态检查) |
+| 5. [安装方式](#安装方式) | 12. [常见问题与排障](#常见问题与排障) |
+| 6. [火山引擎准备](#火山引擎准备) | 13. [目录结构与发布包说明](#目录结构与发布包说明) |
+| 7. [推荐配置](#推荐配置) | 14. [第三方组件与许可证](#第三方组件与许可证) |
 
-默认模式下，它不会把转写文本直接发回聊天，而是把当前消息改写成用户输入，让 AstrBot 后续的 LLM、TTS、长期记忆等插件继续处理。这样用户发语音时，Bot 也能像处理文字消息一样理解上下文。
+---
+
+## 插件定位
+
+`astrbot_plugin_volcengine_asr` 是一个面向 AstrBot 的 QQ 语音识别插件。它会监听消息链中的 `Record` 语音段，读取或下载音频，必要时调用 `ffmpeg` 转码，然后通过火山引擎豆包语音「大模型录音文件极速版识别 API」把语音转成文本。
+
+与“识别后直接回复一条语音转文字结果”的简单插件不同，本插件的默认目标是：
+
+> 把语音转写结果注入为用户输入，让 AstrBot 后续的 LLM、TTS、长期记忆、上下文插件继续正常工作。
+
+也就是说，用户发一条 QQ 语音后，Bot 可以像收到一条文字消息一样理解它、记住它，并自然回复。对于希望实现“用户语音输入，Bot 理解后尽量语音回复”的使用场景，这个插件更像是语音入口层，而不只是一个转写工具。
+
+> [!IMPORTANT]
+> 推荐优先使用 Releases 中的 `astrbot_plugin_volcengine_asr.zip` 安装。
+>
+> GitHub 页面绿色 Code 按钮下载的源码 zip 不等于本插件发布包：源码 zip 通常不包含 Release 包内置的 `bin/linux-x86_64/ffmpeg`，也可能因为目录层级不同导致 AstrBot 找不到 `metadata.yaml`。
+
+## 适合谁使用
+
+本插件比较适合以下场景：
+
+- 你使用 AstrBot 接入 QQ / OneBot v11 / NapCat。
+- 你希望用户可以直接发 QQ 语音，而不是必须打字。
+- 你希望语音内容进入 LLM 对话，而不是 Bot 只机械回复“语音转文字：xxx”。
+- 你正在使用长期记忆插件，例如 `astrbot_plugin_livingmemory`，并且不希望记忆里混入语音提示词模板。
+- 你部署在 Docker、VPS 或 Linux x86_64 / amd64 环境，希望开箱就能处理 AMR、SILK、M4A 等常见 QQ 语音格式。
+- 你希望在调试时可以切换到“直接回复转写文本”的旧行为。
+
+如果你只是想偶尔手动转写一条语音，也可以开启 `reply_transcription=true`，让插件直接在聊天中回复识别结果。但本插件默认更推荐“注入为用户输入”的工作方式。
 
 ## 核心特性
 
 | 能力 | 说明 |
 | :--- | :--- |
 | 自动识别 QQ 语音 | 支持私聊和群聊，识别 OneBot v11 / NapCat 返回的 `Record` 语音消息。 |
-| 内置转码链路 | 支持 AMR、SILK、M4A 等格式转为 WAV / MP3 / OGG，再提交给火山引擎。 |
-| 适合 Docker / VPS | Release 包内置 Linux x86_64 / amd64 版 `ffmpeg`，大多数容器环境不需要额外安装。 |
-| LLM 友好 | 默认把语音内容注入为用户输入，而不是机械回复“语音转文字：xxx”。 |
-| LivingMemory 友好 | 先给记忆插件纯转写文本，再给 LLM 套语音提示词，避免长期记忆被模板污染。 |
+| 火山引擎 ASR | 使用豆包语音大模型录音文件极速版识别接口，默认资源 ID 为 `volc.bigasr.auc_turbo`。 |
+| Base64 上传 | 默认由 AstrBot 所在机器读取或下载音频，再提交给火山接口，适合大多数 QQ 语音 URL 无法公网访问的情况。 |
+| 自动转码 | 检测到 AMR、SILK、M4A、AAC、FLAC、WEBM 等格式时，可调用 `ffmpeg` 转为 WAV / MP3 / OGG。 |
+| Release 包内置 ffmpeg | Release zip 内置 Linux x86_64 / amd64 版 `ffmpeg`，适合 Docker / VPS。 |
+| LLM 友好 | 默认把转写文本注入为用户输入，让模型自然理解语音内容。 |
+| LivingMemory 友好 | 消息阶段写入干净转写文本，LLM 请求阶段才套语音提示词，避免长期记忆被模板污染。 |
 | 可控触发范围 | 可分别控制私聊、群聊、仅被 @ 或唤醒时识别、是否忽略机器人自身消息。 |
 | 友好降级 | 静音、杂音、空结果时可让 LLM 自然地请用户重说。 |
+| 可排障 | 支持显示火山接口 `logid`，便于向火山引擎或运维侧排查问题。 |
 
-## 适配信息
+## 运行流程
 
-| 项目 | 当前状态 |
-| :--- | :--- |
-| 插件版本 | `1.5.0` |
-| AstrBot 版本 | `>=4.16,<5` |
-| Python 版本 | `3.10+` |
-| 默认平台 | `aiocqhttp` / OneBot v11 |
-| 主要依赖 | Release zip 依赖 `httpx` 并优先使用内置 `ffmpeg`；仓库安装额外使用 `imageio-ffmpeg` 兜底 |
-| 火山资源 ID | `volc.bigasr.auc_turbo` |
-
-## 安装
-
-### 方式一：上传 Release 压缩包
-
-推荐优先使用这种方式。它带有内置 `ffmpeg`，适合不方便在 VPS、Docker 或云应用里手动安装转码工具的环境。不要使用 GitHub 页面绿色 Code 按钮下载的源码 zip 代替 Release zip。
-
-1. 打开 [GitHub Releases](https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr/releases/latest)。
-2. 下载 `astrbot_plugin_volcengine_asr.zip`。
-3. 进入 AstrBot WebUI 的插件页面。
-4. 选择从文件安装，上传这个 zip。
-5. 重载插件或重启 AstrBot。
-
-压缩包根目录应直接包含：
+默认推荐流程如下：
 
 ```text
-metadata.yaml
-main.py
-_conf_schema.json
-requirements.txt
-README.md
-assets/VoiceMountain.svg
-assets/FuckUCodeScore.svg
-bin/linux-x86_64/ffmpeg
+QQ 语音 Record
+  -> 读取 file / url / path
+  -> 下载或读取音频
+  -> 检测格式与大小
+  -> 必要时调用 ffmpeg 转码
+  -> Base64 提交到火山引擎 ASR
+  -> 得到纯转写文本
+  -> 消息事件阶段注入 Plain 文本
+  -> LivingMemory 读取和存储干净文本
+  -> LLM 请求阶段套 voice_prompt_template
+  -> 模型生成自然回复
 ```
 
-如果 zip 外面又套了一层同名目录，AstrBot 可能会报找不到 `metadata.yaml`。
-
-### 方式二：从 GitHub 仓库安装
-
-在 AstrBot WebUI 里使用仓库地址安装：
-
-```text
-https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr
-```
-
-仓库根目录已提供 `metadata.yaml`、`main.py`、`_conf_schema.json` 和 `requirements.txt`，可以被 AstrBot 直接识别。仓库安装不会带 Release zip 中的内置 `bin/linux-x86_64/ffmpeg`，所以根目录依赖会安装 `imageio-ffmpeg` 作为转码兜底；如果你的环境禁止安装 Python 依赖，请改用 Release zip 或手动配置系统 `ffmpeg`。
-
-### 方式三：手动放入插件目录
-
-将插件目录放入 AstrBot 的 `data/plugins/` 下，确保目录中至少包含：
-
-```text
-astrbot_plugin_volcengine_asr/
-├── metadata.yaml
-├── main.py
-├── _conf_schema.json
-├── requirements.txt
-└── bin/linux-x86_64/ffmpeg
-```
-
-如果你不是 Linux x86_64 / amd64 环境，可以关闭 `prefer_bundled_ffmpeg`，并把 `ffmpeg_path` 改成系统中的 `ffmpeg` 路径。
-
-## 火山引擎准备
-
-1. 在火山引擎控制台开通豆包语音「大模型录音文件极速版识别」。
-2. 确认资源 ID 为 `volc.bigasr.auc_turbo`。
-3. 新版控制台优先使用 `api_key`。
-4. 旧版控制台可继续使用 `app_key + access_key`。
-
-只要填写了 `api_key`，插件会优先走 `X-Api-Key` 鉴权；未填写 `api_key` 时，才会尝试 `app_key + access_key`。
-
-## 快速配置
-
-大多数 OneBot v11 + NapCat + Linux Docker 用户只需要改这些：
-
-| 配置项 | 推荐值 | 说明 |
-| :--- | :--- | :--- |
-| `api_key` | 你的火山引擎 API Key | 新版控制台优先填这一项。 |
-| `submit_mode` | `base64` | 由 AstrBot 读取音频后上传，适合 QQ 语音文件。 |
-| `enable_transcode` | `true` | 自动把 AMR、SILK 等格式转成火山接口更容易接受的格式。 |
-| `prefer_bundled_ffmpeg` | `true` | Release 包内置 Linux x86_64 `ffmpeg`。 |
-| `inject_as_user_input` | `true` | 让语音像用户文字输入一样继续交给 LLM。 |
-| `reply_transcription` | `false` | 保持默认，不直接回复转写文本。 |
-
-发送一条 QQ 语音后，默认流程是：
-
-```text
-语音消息 -> 火山 ASR -> 纯转写文本 -> LivingMemory / LLM 请求 -> 模型回复
-```
-
-## 工作流程
+对应流程图：
 
 ```mermaid
 flowchart LR
@@ -160,74 +127,258 @@ flowchart LR
     K --> L[LLM 生成回复]
 ```
 
-这个顺序很重要：记忆插件读到的是干净文本，LLM 最终看到的是带语音回复引导的 prompt。
+这个顺序很重要：记忆插件读到的是用户实际说的话，而不是“请尽量使用语音回复”这类提示词包装。
 
-## 配置说明
+## 安装方式
 
-### 鉴权与接口
+### 方式一：上传 Release 压缩包
 
-| 配置项 | 默认值 | 说明 |
+这是最推荐的安装方式，尤其适合 Docker、VPS、云服务器和不方便手动安装 `ffmpeg` 的环境。
+
+1. 打开 [GitHub Releases](https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr/releases/latest)。
+2. 下载 `astrbot_plugin_volcengine_asr.zip`。
+3. 进入 AstrBot WebUI 的插件页面。
+4. 选择“从文件安装”。
+5. 上传这个 zip。
+6. 重载插件或重启 AstrBot。
+7. 打开插件配置页，填写火山引擎鉴权信息。
+
+Release zip 根目录应直接包含：
+
+```text
+metadata.yaml
+main.py
+_conf_schema.json
+requirements.txt
+README.md
+assets/VoiceMountain.svg
+assets/FuckUCodeScore.svg
+bin/linux-x86_64/ffmpeg
+```
+
+如果 zip 外面又套了一层同名目录，例如：
+
+```text
+astrbot_plugin_volcengine_asr/
+└── metadata.yaml
+```
+
+AstrBot 可能会报找不到 `metadata.yaml`。这种情况通常说明你下载的是源码 zip，或者自己打包时目录层级错了。
+
+### 方式二：从 GitHub 仓库安装
+
+在 AstrBot WebUI 里使用仓库地址安装：
+
+```text
+https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr
+```
+
+仓库根目录提供了 `metadata.yaml`、`main.py`、`_conf_schema.json` 和 `requirements.txt`，可以被 AstrBot 直接识别。
+
+需要注意：仓库安装不等同于 Release zip 安装。仓库根目录本身不会带 Release zip 中的内置 `bin/linux-x86_64/ffmpeg`，所以会依赖 `imageio-ffmpeg` 或系统 PATH 中的 `ffmpeg` 作为兜底。如果你的环境禁止安装 Python 依赖，或者 `imageio-ffmpeg` 无法下载二进制，请改用 Release zip 或手动配置系统 `ffmpeg`。
+
+### 方式三：手动放入插件目录
+
+将插件目录放入 AstrBot 的 `data/plugins/` 下，确保目录中至少包含：
+
+```text
+astrbot_plugin_volcengine_asr/
+├── metadata.yaml
+├── main.py
+├── _conf_schema.json
+├── requirements.txt
+└── bin/linux-x86_64/ffmpeg
+```
+
+如果你不是 Linux x86_64 / amd64 环境，可以关闭 `prefer_bundled_ffmpeg`，并把 `ffmpeg_path` 改成系统中的 `ffmpeg` 绝对路径。
+
+## 火山引擎准备
+
+使用前需要在火山引擎控制台准备豆包语音识别能力：
+
+1. 开通豆包语音「大模型录音文件极速版识别」。
+2. 确认资源 ID 为 `volc.bigasr.auc_turbo`。
+3. 新版控制台优先获取并填写 `api_key`。
+4. 旧版控制台可以继续使用 `app_key + access_key`。
+5. 确认账号配额、权限和计费状态正常。
+
+鉴权优先级：
+
+| 情况 | 插件行为 |
+| :--- | :--- |
+| 填写了 `api_key` | 优先使用 `X-Api-Key` 鉴权。 |
+| 未填写 `api_key`，填写了 `app_key + access_key` | 使用旧版鉴权字段。 |
+| 都未填写 | 识别不会正常工作；若 `notify_config_error=true`，会在聊天中提示配置错误。 |
+
+默认接口地址：
+
+```text
+https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash
+```
+
+一般不需要修改 `endpoint`。只有在火山引擎官方文档明确要求更换接口，或你有代理网关时，才建议改它。
+
+## 推荐配置
+
+### OneBot v11 + NapCat + Linux Docker 推荐值
+
+大多数用户只需要改这些：
+
+| 配置项 | 推荐值 | 原因 |
 | :--- | :--- | :--- |
-| `api_key` | 空 | 新版控制台 API Key，推荐使用。 |
-| `app_key` | 空 | 旧版控制台 App Key。 |
-| `access_key` | 空 | 旧版控制台 Access Key。 |
-| `resource_id` | `volc.bigasr.auc_turbo` | 大模型录音文件极速版资源 ID。 |
-| `endpoint` | `https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash` | 火山官方接口地址，通常不需要改。 |
-| `uid` | 空 | 留空时自动使用 `api_key`、`app_key` 或 `astrbot`。 |
+| `api_key` | 你的火山引擎 API Key | 新版控制台优先使用这一项。 |
+| `submit_mode` | `base64` | QQ 语音 URL 经常是内网、临时或需要本机访问，Base64 更稳定。 |
+| `enable_transcode` | `true` | 自动处理 AMR、SILK、M4A 等格式。 |
+| `prefer_bundled_ffmpeg` | `true` | Release 包内置 Linux x86_64 `ffmpeg`。 |
+| `inject_as_user_input` | `true` | 让语音像用户文字输入一样进入 LLM。 |
+| `reply_transcription` | `false` | 不直接回复“语音转文字：xxx”，保持自然对话。 |
+| `inject_on_unclear_voice` | `true` | 没听清时让模型自然请用户重说。 |
 
-### 音频提交与转码
+### 想直接看转写结果的调试配置
 
-| 配置项 | 默认值 | 说明 |
-| :--- | :--- | :--- |
-| `submit_mode` | `base64` | 推荐保持默认。`url` 要求火山服务器能公网访问语音 URL。 |
-| `max_audio_mb` | `20` | 单条语音大小上限。 |
-| `timeout_seconds` | `60` | 下载、转码和接口请求超时时间。 |
-| `enable_transcode` | `true` | 开启自动转码。 |
-| `prefer_bundled_ffmpeg` | `true` | 优先使用插件内置 `ffmpeg`。 |
-| `ffmpeg_path` | `auto` | 可改为系统 `ffmpeg` 绝对路径。 |
+如果你正在排查 ASR 是否成功，可以临时改成：
 
-当 `prefer_bundled_ffmpeg=true` 且 `ffmpeg_path=auto` 或 `ffmpeg` 时，插件会按顺序尝试：Release zip 内置 `bin/linux-x86_64/ffmpeg`、`imageio-ffmpeg`、系统 PATH 中的 `ffmpeg`。
+```text
+reply_transcription = true
+show_logid = true
+```
 
-| `transcode_output_format` | `wav` | 可选 `wav`、`mp3`、`ogg`。 |
-| `transcode_sample_rate` | `16000` | 语音识别场景推荐 16000。 |
-| `transcode_channels` | `1` | 推荐单声道。 |
+这样 Bot 会直接回复转写结果，并在需要时附带火山引擎 `logid`。排查结束后，建议改回：
 
-### 识别参数
+```text
+reply_transcription = false
+show_logid = false
+```
 
-| 配置项 | 默认值 | 说明 |
-| :--- | :--- | :--- |
-| `enable_itn` | `true` | 数字规整。 |
-| `enable_punc` | `true` | 自动标点。 |
-| `enable_ddc` | `true` | 顺滑处理。 |
-| `enable_speaker_info` | `false` | 说话人信息，普通 QQ 短语音通常不需要。 |
+### 群聊较吵时的配置建议
 
-### 行为控制
+如果群里语音很多，但你只希望 Bot 在被叫到时识别，可以开启：
 
-| 配置项 | 默认值 | 说明 |
-| :--- | :--- | :--- |
-| `auto_recognize` | `true` | 自动识别语音消息。 |
-| `inject_as_user_input` | `true` | 把识别结果注入为用户输入。 |
-| `voice_prompt_template` | 默认语音回复模板 | 支持 `<text>` 或 `{text}` 占位符。 |
-| `inject_on_unclear_voice` | `true` | 空结果或静音时也注入“没听清”提示。 |
-| `unclear_voice_prompt` | 默认没听清模板 | 只在 `inject_on_unclear_voice=true` 时生效。 |
-| `reply_transcription` | `false` | 调试用。开启后直接回复转写结果。 |
-| `stop_event_after_recognition` | `true` | 直接回复或报错后停止事件继续传递，避免后续插件重复处理。 |
-| `reply_template` | `语音转文字：{text}` | 仅在直接回复模式下使用。 |
-| `send_empty_result_message` | `true` | 直接回复模式下，静音或空结果时发送提示；若 `inject_on_unclear_voice=true`，会优先注入没听清提示。 |
+```text
+only_when_at_or_wake = true
+```
 
-### 范围与排查
+这样可以减少无关语音触发，也能降低调用火山接口的成本。
 
-| 配置项 | 默认值 | 说明 |
-| :--- | :--- | :--- |
-| `enable_private` | `true` | 私聊启用。 |
-| `enable_group` | `true` | 群聊启用。 |
-| `only_when_at_or_wake` | `false` | 群聊较吵时可以开启。 |
-| `ignore_self` | `true` | 忽略机器人自己发送的消息。 |
-| `notify_config_error` | `true` | 鉴权未配置时在聊天中提示。 |
-| `notify_asr_error` | `true` | 识别失败时在聊天中提示。 |
-| `show_logid` | `false` | 排查火山接口问题时可临时开启。 |
+## 完整配置说明
 
-## 默认提示词
+> 本插件使用 AstrBot 原生插件配置页。下面按功能分组解释每一个配置项。
+
+<details>
+<summary>点击查看完整配置项详解</summary>
+
+### 1. 鉴权与接口
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `api_key` | string | 空 | 新版控制台 API Key。填写后优先使用 `X-Api-Key` 鉴权。 |
+| `app_key` | string | 空 | 旧版控制台 App Key。仅在未填写 `api_key` 时使用。 |
+| `access_key` | string | 空 | 旧版控制台 Access Key。需要和 `app_key` 一起填写。 |
+| `resource_id` | string | `volc.bigasr.auc_turbo` | 火山引擎大模型录音文件极速版资源 ID。 |
+| `endpoint` | string | `https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash` | 火山官方识别接口地址。 |
+| `uid` | string | 空 | 用户标识。留空时自动使用 `api_key`、`app_key` 或 `astrbot`。 |
+
+填写建议：
+
+- 新用户优先只填 `api_key`。
+- 旧版控制台用户再考虑 `app_key + access_key`。
+- 不要随意修改 `resource_id` 和 `endpoint`，除非你明确知道火山侧要求变更。
+
+### 2. 音频提交与转码
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `submit_mode` | string | `base64` | 音频提交方式，可选 `base64` / `url`。 |
+| `max_audio_mb` | int | `20` | 单条语音大小上限。Base64 上传建议保持 20MB 以内。 |
+| `timeout_seconds` | int | `60` | 下载、转码和接口请求超时时间。 |
+| `enable_transcode` | bool | `true` | 遇到不支持格式时自动调用 `ffmpeg` 转码。 |
+| `prefer_bundled_ffmpeg` | bool | `true` | 优先使用 Release 包内置 `ffmpeg`。 |
+| `ffmpeg_path` | string | `auto` | `ffmpeg` 可执行文件路径。可填写绝对路径。 |
+| `transcode_output_format` | string | `wav` | 转码输出格式，可选 `wav` / `mp3` / `ogg`。 |
+| `transcode_sample_rate` | int | `16000` | 转码采样率。语音识别推荐 16000。 |
+| `transcode_channels` | int | `1` | 转码声道数。语音识别推荐单声道。 |
+
+`ffmpeg` 查找顺序：
+
+1. 当 `prefer_bundled_ffmpeg=true` 且 `ffmpeg_path=auto` 或 `ffmpeg` 时，优先尝试 Release zip 内置 `bin/linux-x86_64/ffmpeg`。
+2. 如果内置文件不可用，尝试 `imageio-ffmpeg` 提供的可执行文件。
+3. 最后尝试系统 PATH 中的 `ffmpeg`。
+4. 如果你在 `ffmpeg_path` 中填写绝对路径，则优先使用该路径。
+
+关于 `submit_mode`：
+
+- `base64`：推荐。AstrBot 所在机器先读取或下载音频，再把内容提交给火山引擎。
+- `url`：只有当火山引擎服务器可以公网访问该语音 URL 时才适合。大多数 OneBot / NapCat 的 QQ 语音 URL 不满足这个条件。
+
+### 3. 识别参数
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `enable_itn` | bool | `true` | 启用数字规整，例如把口语数字规整成更适合阅读的文本。 |
+| `enable_punc` | bool | `true` | 启用自动标点。 |
+| `enable_ddc` | bool | `true` | 启用顺滑处理。 |
+| `enable_speaker_info` | bool | `false` | 启用说话人信息。普通 QQ 短语音通常不需要。 |
+
+建议保持默认。QQ 短语音大多数是单人短句，开启说话人信息通常收益不大。
+
+### 4. 注入与回复行为
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `auto_recognize` | bool | `true` | 自动识别语音消息总开关。 |
+| `inject_as_user_input` | bool | `true` | 将识别结果注入为用户输入，继续交给 LLM。 |
+| `voice_prompt_template` | string | 默认语音回复模板 | LLM 请求阶段使用的语音提示词模板。 |
+| `inject_on_unclear_voice` | bool | `true` | 静音、杂音、空结果时也注入“没听清”提示。 |
+| `unclear_voice_prompt` | string | 默认没听清模板 | 仅在 `inject_on_unclear_voice=true` 时生效。 |
+| `reply_transcription` | bool | `false` | 直接回复转写结果。主要用于调试或兼容旧行为。 |
+| `reply_template` | string | `语音转文字：{text}` | 直接回复模式下的回复模板。 |
+| `stop_event_after_recognition` | bool | `true` | 直接回复或报错后停止事件继续传递，避免后续插件重复处理。 |
+| `send_empty_result_message` | bool | `true` | 直接回复模式下，静音或空结果时发送提示。 |
+
+推荐组合：
+
+```text
+inject_as_user_input = true
+reply_transcription = false
+inject_on_unclear_voice = true
+```
+
+这组配置能让用户语音自然进入 LLM，同时让 LivingMemory 记录干净文本。
+
+### 5. 场景范围与触发控制
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `enable_private` | bool | `true` | 私聊启用。 |
+| `enable_group` | bool | `true` | 群聊启用。 |
+| `only_when_at_or_wake` | bool | `false` | 群聊中仅被 @ 或唤醒时识别。 |
+| `ignore_self` | bool | `true` | 忽略机器人自己发送的消息。 |
+
+群聊建议：
+
+- 小群或语音量少：可以保持 `only_when_at_or_wake=false`。
+- 大群或语音量多：建议开启 `only_when_at_or_wake=true`。
+
+### 6. 错误提示与排查
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `notify_config_error` | bool | `true` | 未配置鉴权时在聊天中提示。 |
+| `notify_asr_error` | bool | `true` | 识别失败时在聊天中提示。 |
+| `show_logid` | bool | `false` | 回复中显示火山引擎 `logid`，方便排查。 |
+
+排障时可以临时开启：
+
+```text
+show_logid = true
+notify_asr_error = true
+```
+
+复现后把日志或回复中的 `logid` 记录下来，再向火山引擎侧排查。
+
+</details>
+
+## 默认提示词与模板写法
 
 默认 `voice_prompt_template`：
 
@@ -235,15 +386,33 @@ flowchart LR
 <text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，严禁讨论本插件的实际功能“转文字”的事实，回复时不要考虑括号内内容]
 ```
 
-默认模板的目的，是让 LLM 把语音内容当作用户原话处理，而不是向用户暴露“语音转文字”的中间过程。`voice_prompt_template` 支持 `<text>` 和 `{text}`；如果你在自定义模板里需要字面量 `{` 或 `}`，请写成 `{{` 和 `}}`。
+这个模板的目的不是告诉用户“我把语音转成了文字”，而是让 LLM 把语音内容当作用户原话处理，并在合适时倾向语音回复。
 
-偏向文字回复时，可以改成：
+### 支持的占位符
+
+| 占位符 | 说明 |
+| :--- | :--- |
+| `<text>` | 推荐写法，表示识别出的语音文本。 |
+| `{text}` | 等价写法，表示识别出的语音文本。 |
+| `{logid}` | 火山引擎接口返回的 logid。 |
+| `{request_id}` | 请求 ID。 |
+| `{duration_ms}` | 本次识别耗时，单位毫秒。 |
+
+如果你在自定义模板中需要字面量 `{` 或 `}`，请写成 `{{` 和 `}}`，避免被 Python 模板格式化解析。
+
+### 偏向文字回复的模板示例
 
 ```text
 [用户发送了一条语音，以下是自动转写内容：<text>。请将其视为用户本人的输入，并自然回复。]
 ```
 
-默认 `unclear_voice_prompt`：
+### 偏向语音回复的模板示例
+
+```text
+<text>[上面是用户刚刚说出的语音内容。请把它当作用户原话理解，结合上下文自然回复；如果当前系统支持语音输出，请优先使用语音风格进行回应。]
+```
+
+### 默认没听清提示词
 
 ```text
 [用户刚刚发送了一条语音，但系统没有听清内容（可能是静音、杂音或识别失败）。请以没听清为由，自然地请用户再说一次或改用文字补充，不要直接说是系统错误。]
@@ -261,54 +430,94 @@ flowchart LR
 - `astrbot_plugin_livingmemory` 记录和召回的是干净的用户原话。
 - LLM 最终仍然收到“这是语音转写内容，请自然回复”的提示。
 
-如果你在 LivingMemory 里看到大量提示词模板文字，说明仍在使用旧版本，请更新到 `1.4.7` 或更高版本。
+如果旧版本直接把 `voice_prompt_template` 写进消息事件，长期记忆里就可能出现大量类似“请尽量使用语音回复”“不要讨论转文字事实”的模板内容。这个版本避免了这个问题。
 
-## 命令
+如果你在 LivingMemory 中仍看到大量提示词模板文字，请检查：
+
+- 插件版本是否为 `1.4.7` 或更高。
+- 是否确实安装了最新 Release zip。
+- 是否有其他插件在更早阶段改写了消息内容。
+- 日志中是否出现“已将语音识别结果注入为干净用户输入”和“已在 LLM 请求阶段应用语音提示词模板”。
+
+## 命令与状态检查
 
 | 命令 | 用途 |
 | :--- | :--- |
 | `/volc_asr_status` | 查看插件配置和运行状态。 |
 | `/火山语音状态` | 中文别名，等价于上一条。 |
 
-## 常见问题
+状态检查适合用于确认：
+
+- 是否已配置鉴权。
+- 当前是否启用自动识别。
+- 当前提交模式是 `base64` 还是 `url`。
+- 是否启用转码。
+- 当前是否优先使用内置 `ffmpeg`。
+
+## 常见问题与排障
 
 ### 上传 zip 后提示找不到 metadata.yaml
 
-请确认 zip 根目录直接包含 `metadata.yaml`，而不是：
+请确认你上传的是 Release 页面里的 `astrbot_plugin_volcengine_asr.zip`，并且 zip 根目录直接包含：
 
 ```text
-astrbot_plugin_volcengine_asr/
-└── metadata.yaml
+metadata.yaml
+main.py
+_conf_schema.json
+requirements.txt
 ```
 
-推荐直接下载 Releases 中已经打好的 zip。
+不要使用 GitHub 绿色 Code 按钮下载的源码 zip 代替 Release zip。
 
 ### 提示需要 ffmpeg
 
-确认以下几点：
+按顺序检查：
 
-- 你使用的是 Release zip，而不是直接下载 GitHub 源码 zip。
-- 当前服务器架构是 Linux x86_64 / amd64。
-- `prefer_bundled_ffmpeg=true`。
-- 如果不是 x86_64，请安装系统 `ffmpeg`，并设置 `ffmpeg_path`。
+1. 你是否使用的是 Release zip。
+2. 当前服务器是否为 Linux x86_64 / amd64。
+3. `prefer_bundled_ffmpeg` 是否为 `true`。
+4. `ffmpeg_path` 是否为 `auto` 或正确的绝对路径。
+5. 如果不是 x86_64 架构，是否已经安装系统 `ffmpeg`。
+
+非 Linux x86_64 / amd64 环境建议：
+
+```text
+prefer_bundled_ffmpeg = false
+ffmpeg_path = /usr/bin/ffmpeg
+```
+
+路径按你的实际系统修改。
 
 ### URL 模式失败
 
-大多数 OneBot / NapCat 语音 URL 是内网地址、临时地址或需要本机访问。火山引擎服务器无法访问这些 URL 时会失败。建议保持：
+大多数 OneBot / NapCat 语音 URL 是内网地址、临时地址，或需要 AstrBot 所在机器携带上下文访问。火山引擎服务器通常无法直接访问这些 URL。
+
+建议保持：
 
 ```text
 submit_mode = base64
 ```
 
+只有当你确认语音 URL 能被公网匿名访问时，才建议尝试 `submit_mode=url`。
+
 ### LLM 没有收到语音内容
 
-检查：
+检查这些配置：
 
-- `auto_recognize=true`
-- `inject_as_user_input=true`
-- `reply_transcription=false`
-- 日志中是否出现“已将语音识别结果注入为干净用户输入”
-- 日志中是否出现“已在 LLM 请求阶段应用语音提示词模板”
+```text
+auto_recognize = true
+inject_as_user_input = true
+reply_transcription = false
+```
+
+再看日志中是否出现：
+
+```text
+已将语音识别结果注入为干净用户输入
+已在 LLM 请求阶段应用语音提示词模板
+```
+
+如果第一条没有出现，说明 ASR 或事件注入阶段可能没有成功。如果第二条没有出现，说明 LLM 请求阶段可能没有走到，或事件没有携带对应标记。
 
 ### Bot 直接回复“语音转文字：xxx”
 
@@ -318,17 +527,52 @@ submit_mode = base64
 reply_transcription = false
 ```
 
-### 火山接口失败
+默认推荐让语音进入 LLM，而不是直接把转写结果发回聊天。
+
+### 静音或杂音时回复很机械
+
+建议开启：
+
+```text
+inject_on_unclear_voice = true
+```
+
+然后优化 `unclear_voice_prompt`，让模型用更自然的方式请用户重说。
+
+### 群聊里所有语音都会触发，太吵了
+
+开启：
+
+```text
+only_when_at_or_wake = true
+```
+
+这样只有 Bot 被 @ 或被唤醒时才识别群聊语音。
+
+### 火山接口失败，需要排查
 
 临时开启：
 
 ```text
 show_logid = true
+notify_asr_error = true
 ```
 
-复现一次后，把日志或回复里的 `logid` 提供给火山引擎排查。
+复现一次后，记录日志或回复中的 `logid`，再结合火山引擎控制台、接口权限、资源 ID、账户余额和网络连通性排查。
 
-## 文件结构
+### 仓库安装和 Release 安装有什么区别
+
+| 项目 | Release zip | GitHub 仓库安装 | GitHub 源码 zip |
+| :--- | :--- | :--- | :--- |
+| AstrBot 推荐程度 | 推荐 | 可用 | 不推荐直接当发布包用 |
+| 根目录是否直接含 `metadata.yaml` | 是 | 是 | 通常外层会套目录 |
+| 是否带内置 `ffmpeg` | 是 | 否 | 否 |
+| 适合 Docker / VPS | 是 | 依赖环境 | 依赖环境 |
+| 适合普通用户 | 最适合 | 适合能处理依赖的人 | 容易装错 |
+
+## 目录结构与发布包说明
+
+仓库结构大致如下：
 
 ```text
 .
@@ -356,9 +600,51 @@ show_logid = true
     └── bin/linux-x86_64/ffmpeg
 ```
 
-根目录用于 GitHub 仓库安装；`astrbot_plugin_volcengine_asr/` 用于生成 Release zip。
+说明：
 
-## 第三方组件
+- 仓库根目录用于支持 AstrBot 从 GitHub 仓库地址安装。
+- `astrbot_plugin_volcengine_asr/` 用于生成 Release zip。
+- 根目录 `main.py` 是轻量入口，插件完整实现位于 `astrbot_plugin_volcengine_asr/main.py`。
+- Release zip 根目录不会额外套一层同名目录。
+- Release zip 会包含 Linux x86_64 / amd64 内置 `ffmpeg`。
+
+## 验证与维护说明
+
+发布前建议至少确认：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile main.py astrbot_plugin_volcengine_asr/main.py
+```
+
+```bash
+python3 -c "import json,pathlib; [json.loads(pathlib.Path(p).read_text(encoding='utf-8')) for p in ['_conf_schema.json','astrbot_plugin_volcengine_asr/_conf_schema.json']]; print('OK')"
+```
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q -p no:cacheprovider tests
+```
+
+如果本地没有 `pytest`，至少应确保纯函数 helper 的测试逻辑能运行，配置 JSON 能解析，Release zip 根目录结构正确。
+
+## 版本说明
+
+当前版本：`1.5.0`
+
+本版本重点：
+
+- 根目录入口轻量化，减少双份主逻辑维护成本。
+- 修复语音转写内容包含 `{}` 时的提示词模板渲染边界问题。
+- 保持 LivingMemory 两阶段注入语义。
+- 明确 Release zip、仓库安装、源码 zip 的区别。
+- 补齐 `ffmpeg` 查找顺序和配置项说明。
+- 增加基础 helper 测试。
+- 更新 README 视觉资源和项目展示。
+
+完整更新记录见 [CHANGELOG.md](./CHANGELOG.md)。
+
+## 第三方组件与许可证
+
+本插件涉及或间接使用以下组件：
 
 - 火山引擎豆包语音大模型录音文件极速版识别 API
 - `httpx`
@@ -366,7 +652,5 @@ show_logid = true
 - `ffmpeg`
 
 `imageio-ffmpeg` 的许可证文本见 [third_party_licenses/imageio-ffmpeg.LICENSE](./third_party_licenses/imageio-ffmpeg.LICENSE)。
-
-## 许可证
 
 本项目使用 MIT License。内置或间接使用的第三方组件遵循其各自许可证。
