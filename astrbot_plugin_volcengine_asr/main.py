@@ -16,6 +16,7 @@ import httpx
 import astrbot.api.message_components as Comp
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.provider import ProviderRequest
 from astrbot.api.star import Context, Star
 
 try:
@@ -43,6 +44,12 @@ DEFAULT_UNCLEAR_VOICE_PROMPT = (
     "[用户刚刚发送了一条语音，但系统没有听清内容（可能是静音、杂音或识别失败）。"
     "请以没听清为由，自然地请用户再说一次或改用文字补充，不要直接说是系统错误。]"
 )
+DEFAULT_UNCLEAR_MEMORY_TEXT = "用户发送了一条语音，但未识别出有效内容。"
+ASR_EXTRA_TEXT = "volcengine_asr_text"
+ASR_EXTRA_MEMORY_TEXT = "volcengine_asr_memory_text"
+ASR_EXTRA_LLM_TEXT = "volcengine_asr_llm_text"
+ASR_EXTRA_INJECTED = "volcengine_asr_injected"
+ASR_EXTRA_UNCLEAR = "volcengine_asr_unclear"
 
 
 class UserVisibleError(Exception):
@@ -169,6 +176,12 @@ def _format_with_fallback(template: str, values: dict[str, Any]) -> str:
         return template.format(**values)
     except (KeyError, ValueError, IndexError):
         return str(values.get("text", ""))
+
+
+def _replace_first_text(text: str, old: str, new: str) -> tuple[str, bool]:
+    if not old or old not in text:
+        return text, False
+    return text.replace(old, new, 1), True
 
 
 def _resolve_ffmpeg_path(configured_path: str, prefer_bundled: bool) -> tuple[str, str]:
@@ -405,7 +418,7 @@ class VolcengineAsrPlugin(Star):
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=10)
     async def on_message(self, event: AstrMessageEvent):
-        """自动识别消息中的语音段，并直接回复文字。"""
+        """自动识别消息中的语音段，并将事件改写为干净转写文本。"""
         if not self.auto_recognize or not self._allow_event(event):
             return
 
@@ -464,9 +477,18 @@ class VolcengineAsrPlugin(Star):
         inject_mode = self.inject_as_user_input and not self.reply_transcription
 
         if inject_mode and results:
-            injected_text = self._build_injected_user_text(results)
-            self._inject_user_text(event, injected_text)
-            logger.info(f"已将语音识别结果注入为用户输入：{injected_text}")
+            transcription_text = self._build_transcription_text(results)
+            llm_text = self._build_llm_user_text(results)
+            self._inject_user_text(
+                event,
+                memory_text=transcription_text,
+                llm_text=llm_text,
+                raw_text=transcription_text,
+            )
+            logger.info(
+                "已将语音识别结果注入为干净用户输入，"
+                f"memory_text={transcription_text}, llm_text={llm_text}"
+            )
             return
 
         if (
@@ -475,9 +497,16 @@ class VolcengineAsrPlugin(Star):
             and unclear_count > 0
             and self.inject_on_unclear_voice
         ):
-            self._inject_user_text(event, self.unclear_voice_prompt)
+            self._inject_user_text(
+                event,
+                memory_text=DEFAULT_UNCLEAR_MEMORY_TEXT,
+                llm_text=self.unclear_voice_prompt,
+                raw_text="",
+                unclear=True,
+            )
             logger.info(
-                f"语音未识别到内容，已注入未听清提示：{self.unclear_voice_prompt}"
+                "语音未识别到内容，已注入干净未听清事件文本，"
+                f"llm_text={self.unclear_voice_prompt}"
             )
             return
 
@@ -493,6 +522,45 @@ class VolcengineAsrPlugin(Star):
 
     async def terminate(self) -> None:
         await self.client.close()
+
+    @filter.on_llm_request(priority=-10)
+    async def apply_voice_prompt_template(
+        self,
+        event: AstrMessageEvent,
+        req: ProviderRequest,
+    ) -> None:
+        """在 livingmemory 处理完干净文本后，再把 LLM prompt 替换为语音模板。"""
+        memory_text = event.get_extra(ASR_EXTRA_MEMORY_TEXT, "")
+        llm_text = event.get_extra(ASR_EXTRA_LLM_TEXT, "")
+        if not isinstance(memory_text, str) or not isinstance(llm_text, str):
+            return
+        memory_text = memory_text.strip()
+        llm_text = llm_text.strip()
+        if not memory_text or not llm_text:
+            return
+
+        prompt = getattr(req, "prompt", "")
+        if not isinstance(prompt, str):
+            return
+
+        new_prompt, replaced = _replace_first_text(prompt, memory_text, llm_text)
+        if not replaced:
+            if not prompt.strip():
+                new_prompt = llm_text
+                replaced = True
+            elif prompt.strip() == memory_text:
+                new_prompt = llm_text
+                replaced = True
+
+        if replaced:
+            req.prompt = new_prompt
+            event.set_extra("volcengine_asr_llm_prompt_applied", True)
+            logger.info("已在 LLM 请求阶段应用语音提示词模板，长期记忆仍保留干净转写文本。")
+        else:
+            logger.warning(
+                "未能在 LLM prompt 中定位语音转写文本，跳过模板替换，"
+                f"memory_text={memory_text}, prompt={prompt[:120]}"
+            )
 
     def _allow_event(self, event: AstrMessageEvent) -> bool:
         message_obj = getattr(event, "message_obj", None)
@@ -706,11 +774,13 @@ class VolcengineAsrPlugin(Star):
 
         return "\n".join(part for part in parts if part).strip()
 
-    def _build_injected_user_text(self, results: list[AsrResult]) -> str:
+    def _build_transcription_text(self, results: list[AsrResult]) -> str:
         if len(results) == 1:
-            text = results[0].text
-        else:
-            text = "\n".join(f"{index}. {item.text}" for index, item in enumerate(results, start=1))
+            return results[0].text
+        return "\n".join(f"{index}. {item.text}" for index, item in enumerate(results, start=1))
+
+    def _build_llm_user_text(self, results: list[AsrResult]) -> str:
+        text = self._build_transcription_text(results)
 
         template = self.voice_prompt_template
         values = {
@@ -725,12 +795,22 @@ class VolcengineAsrPlugin(Star):
         return _format_with_fallback(template, values).strip()
 
     @staticmethod
-    def _inject_user_text(event: AstrMessageEvent, text: str) -> None:
-        event.message_str = text
+    def _inject_user_text(
+        event: AstrMessageEvent,
+        *,
+        memory_text: str,
+        llm_text: str,
+        raw_text: str,
+        unclear: bool = False,
+    ) -> None:
+        event.message_str = memory_text
         message_obj = getattr(event, "message_obj", None)
         if message_obj is not None:
-            setattr(message_obj, "message_str", text)
-            setattr(message_obj, "message", [Comp.Plain(text)])
+            setattr(message_obj, "message_str", memory_text)
+            setattr(message_obj, "message", [Comp.Plain(memory_text)])
 
-        event.set_extra("volcengine_asr_text", text)
-        event.set_extra("volcengine_asr_injected", True)
+        event.set_extra(ASR_EXTRA_TEXT, raw_text or memory_text)
+        event.set_extra(ASR_EXTRA_MEMORY_TEXT, memory_text)
+        event.set_extra(ASR_EXTRA_LLM_TEXT, llm_text)
+        event.set_extra(ASR_EXTRA_INJECTED, True)
+        event.set_extra(ASR_EXTRA_UNCLEAR, unclear)

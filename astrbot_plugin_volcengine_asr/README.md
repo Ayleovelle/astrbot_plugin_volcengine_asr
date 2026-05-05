@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
-  <img src="https://img.shields.io/badge/Version-1.4.6-brightgreen.svg" alt="Version 1.4.6">
+  <img src="https://img.shields.io/badge/Version-1.4.7-brightgreen.svg" alt="Version 1.4.7">
 </p>
 
 <p align="center">
@@ -47,7 +47,7 @@
 
 > [!NOTE]
 > **🧩 当前版本**
-> - 插件版本：`1.4.6`
+> - 插件版本：`1.4.7`
 > - 适配 AstrBot：`>=4.16,<5`
 > - 已处理 AstrBot `v4.24.1` 的 `StarMetadata.pages` 字段缺失兼容问题
 > - 已内置 Linux x86_64/amd64 版 `ffmpeg`，适合无法在 VPS 或 Docker 容器内单独安装 `ffmpeg` 的场景
@@ -57,7 +57,7 @@
 ### 🎤 自动语音转文字
 
 - 监听 AstrBot 消息链中的 `Record` 语音段，**自动识别私聊和群聊中的 QQ 语音消息**。
-- 默认行为：识别完成后**不直接回复转写文本**，而是将识别文本包装成提示词改写当前消息事件，让后续 LLM 像处理用户文字消息一样处理这条语音。
+- 默认行为：识别完成后**不直接回复转写文本**，而是先把当前消息事件改写为纯转写文本，再在 LLM 请求阶段套用语音提示词模板。
 - 识别为空 / 静音 / 杂音时，自动注入「没听清」提示词，让 LLM 自然地请用户重说，而不是冷冰冰回复「静音音频」。
 
 ### 🔐 双模式鉴权
@@ -85,7 +85,7 @@
 
 ### 🧩 插件兼容性
 
-- 已适配 [`astrbot_plugin_livingmemory`](https://github.com/lxfight-s-Astrbot-Plugins/astrbot_plugin_livingmemory)，通过提升 handler 优先级（`priority=10`）确保 ASR 注入先于记忆记录执行，使转写文本可被 livingmemory 正常索引。
+- 已适配 [`astrbot_plugin_livingmemory`](https://github.com/lxfight-s-Astrbot-Plugins/astrbot_plugin_livingmemory)：LivingMemory 检索和存储拿到纯转写文本，LLM 最终请求仍会使用本插件配置的语音提示词模板。
 
 ## 🚀 安装与使用
 
@@ -151,13 +151,13 @@ third_party_licenses/imageio-ffmpeg.LICENSE
 | `voice_prompt_template` | 默认模板 | 引导 LLM 优先使用语音回复 |
 | `reply_transcription` | `false` | 保持关闭，避免 Bot 直接回复转写文本 |
 
-配置完成后发送一条 QQ 语音，插件会把当前用户消息改写为：
+配置完成后发送一条 QQ 语音，插件会先把当前用户消息改写为干净的转写文本，例如：
 
 ```text
-这里是识别结果[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，请不要告诉用户自己是通过转文字的方式听到的，回复时不要考虑括号内内容]
+这里是识别结果
 ```
 
-随后 AstrBot 的默认 LLM 流程会基于这段用户输入生成回复。
+随后在 AstrBot 进入 LLM 请求前，本插件会把这段文本替换为 `voice_prompt_template` 渲染后的内容。这样 LivingMemory 看到的是「这里是识别结果」，LLM 看到的仍是带语音回复引导的完整提示词。
 
 ## 🛠️ 配置指南
 
@@ -221,7 +221,7 @@ bin/linux-x86_64/ffmpeg
 | `auto_recognize` | `true` | 是否自动识别收到的语音消息 |
 | `inject_as_user_input` | `true` | 识别成功后改写当前事件文本并继续交给 LLM |
 | `voice_prompt_template` | 见下方 | 注入给 LLM 的包装模板。支持 `<text>` 或 `{text}` 占位符 |
-| `inject_on_unclear_voice` | `true` | 识别为空/静音/杂音时也注入为用户输入，让 LLM 以「没听清」为由请用户重说 |
+| `inject_on_unclear_voice` | `true` | 识别为空/静音/杂音时也注入为用户消息，让 LLM 以「没听清」为由请用户重说 |
 | `unclear_voice_prompt` | 见下方 | 没听清时的注入提示词 |
 | `reply_transcription` | `false` | 调试或兼容旧行为时开启。开启后 Bot 会直接回复转写结果 |
 | `enable_private` | `true` | 私聊中是否启用 |
@@ -295,8 +295,9 @@ flowchart LR
     D -->|AMR/SILK/M4A| F[ffmpeg 转码 WAV]
     F --> E
     E --> G[火山引擎识别]
-    G --> H[模板包装]
-    H --> I[改写消息事件 → LLM]
+    G --> H[生成转写结果]
+    H --> I[先写入纯转写事件]
+    I --> J[on_llm_request 再套语音提示词]
 ```
 
 详细步骤：
@@ -306,8 +307,9 @@ flowchart LR
 3. 检测音频头和扩展名。
 4. 如果是 WAV、MP3、OGG、OPUS，直接 Base64 上传。
 5. 如果是 AMR、SILK 等格式，调用 `ffmpeg` 转成 WAV 后上传。
-6. 识别成功后，用 `voice_prompt_template` 包装识别文本。
-7. 将当前事件的 `message_str`、`message_obj.message_str` 和消息链改写为一个 `Plain` 文本段，让后续 LLM 按用户输入处理。
+6. 识别成功后，先生成一份干净的纯转写文本。
+7. 将当前事件的 `message_str`、`message_obj.message_str` 和消息链改写为一个 `Plain` 纯文本段，让 LivingMemory 等插件按普通用户文字处理。
+8. 在 `on_llm_request(priority=-10)` 阶段，把 `req.prompt` 中的纯转写文本替换成 `voice_prompt_template` 渲染后的语音提示词，不污染长期记忆内容。
 
 > [!NOTE]
 > SILK 是否能成功转码取决于当前 `ffmpeg` 是否支持对应解码器。AMR 是当前主要目标，内置 `ffmpeg` 通常可以处理。
@@ -317,7 +319,7 @@ flowchart LR
 <details>
 <summary><b>📦 安装相关</b></summary>
 
-- **上传 zip 报 `Not a directory`**：确认 zip 第一个条目是 `astrbot_plugin_volcengine_asr/` 目录，而不是直接以 `main.py` 开头。
+- **上传 zip 报找不到 `metadata.yaml`**：确认 zip 根目录直接包含 `metadata.yaml`、`main.py` 和 `_conf_schema.json`，不要再套一层 `astrbot_plugin_volcengine_asr/` 目录。
 - **安装提示目录已存在**：删除前一次失败安装留下的 `astrbot_plugin_volcengine_asr` 或 `plugin_upload_*` 目录后重试。
 
 </details>
@@ -343,7 +345,7 @@ flowchart LR
 <summary><b>🤖 行为相关</b></summary>
 
 - **Bot 仍直接回复「语音转文字」**：检查 `reply_transcription` 是否被打开。
-- **LLM 没有收到语音内容**：检查 `inject_as_user_input=true`，并确认识别成功日志里有「已将语音识别结果注入为用户输入」。
+- **LLM 没有收到语音内容**：检查 `inject_as_user_input=true`，并确认日志里有「已将语音识别结果注入为干净用户输入」和「已在 LLM 请求阶段应用语音提示词模板」。
 - **URL 模式失败**：切回 `base64`，URL 模式通常不适合 OneBot/NapCat 临时语音地址。
 
 </details>
