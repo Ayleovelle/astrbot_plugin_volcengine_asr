@@ -1,105 +1,79 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
   <title id="title">火山引擎语音转文字 AstrBot 插件</title>
-  <desc id="desc">扁平化中文项目头图，用声波、转写卡片、火山、术式环、羊角与火山学者元素表现 QQ 语音识别、转码、纯文本注入和长期记忆友好。</desc>
+  <desc id="desc">简洁扁平化 README 头图，展示 QQ 语音经过火山引擎 ASR 转为干净文本，并进入 AstrBot、LLM 和 LivingMemory 的流程。</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#fff7ed"/>
-      <stop offset="0.58" stop-color="#ffedd5"/>
-      <stop offset="1" stop-color="#fdba74"/>
+      <stop offset="0" stop-color="#FFF7ED"/>
+      <stop offset="1" stop-color="#FED7AA"/>
     </linearGradient>
-    <linearGradient id="lava" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#fef3c7"/>
-      <stop offset="0.46" stop-color="#fb923c"/>
-      <stop offset="1" stop-color="#dc2626"/>
-    </linearGradient>
-    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#fff7ed"/>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#FFFBEB"/>
     </linearGradient>
     <style>
-      .title { font: 900 52px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #431407; letter-spacing: 1px; }
-      .subtitle { font: 700 23px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #9a3412; }
-      .tag { font: 800 16px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #fff7ed; }
-      .flow { font: 800 15px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #7c2d12; }
-      .label { font: 900 17px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #7c2d12; }
-      .small { font: 700 14px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #c2410c; }
-      .mono { font: 800 18px "JetBrains Mono", "Consolas", monospace; fill: #9a3412; }
+      .title { font: 900 56px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #3B1A0A; letter-spacing: 1px; }
+      .subtitle { font: 700 24px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #9A3412; }
+      .chip { font: 800 17px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #7C2D12; }
+      .chip-hot { font: 800 17px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #FFFFFF; }
+      .flow { font: 800 18px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #7C2D12; }
+      .note { font: 700 15px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #C2410C; }
     </style>
   </defs>
 
-  <rect width="1200" height="360" rx="30" fill="url(#bg)"/>
-  <circle cx="1008" cy="68" r="128" fill="#fb923c" opacity="0.12"/>
-  <circle cx="1088" cy="268" r="82" fill="#ea580c" opacity="0.10"/>
-  <path d="M724 302 C812 240 944 244 1118 146" fill="none" stroke="#f97316" stroke-width="4" stroke-linecap="round" stroke-dasharray="14 18" opacity="0.25"/>
+  <rect width="1200" height="360" rx="32" fill="url(#bg)"/>
+  <circle cx="1074" cy="72" r="132" fill="#FB923C" opacity="0.14"/>
+  <circle cx="984" cy="296" r="96" fill="#F97316" opacity="0.10"/>
 
-  <g transform="translate(56 38)">
-    <rect x="0" y="0" width="324" height="284" rx="36" fill="url(#card)" stroke="#fed7aa" stroke-width="2"/>
-    <circle cx="162" cy="142" r="112" fill="#ffedd5"/>
-    <circle cx="162" cy="142" r="88" fill="none" stroke="#ea580c" stroke-width="6" stroke-dasharray="18 14"/>
-    <circle cx="162" cy="142" r="124" fill="none" stroke="#fdba74" stroke-width="3" stroke-dasharray="4 16"/>
+  <g transform="translate(64 48)">
+    <rect width="252" height="252" rx="34" fill="url(#panel)" stroke="#FDBA74" stroke-width="2"/>
+    <circle cx="126" cy="126" r="86" fill="#FFEDD5"/>
+    <circle cx="126" cy="126" r="104" fill="none" stroke="#FB923C" stroke-width="3" stroke-dasharray="10 12" opacity="0.75"/>
 
-    <path d="M70 82 C50 48 70 22 104 18 C92 48 118 60 108 88" fill="none" stroke="#7c2d12" stroke-width="9" stroke-linecap="round"/>
-    <path d="M254 82 C274 48 254 22 220 18 C232 48 206 60 216 88" fill="none" stroke="#7c2d12" stroke-width="9" stroke-linecap="round"/>
-    <path d="M92 38 L114 54 L88 66 Z" fill="#f97316"/>
-    <path d="M232 38 L210 54 L236 66 Z" fill="#f97316"/>
+    <path d="M58 172 L126 58 L194 172 Z" fill="#7C2D12"/>
+    <path d="M126 58 L153 105 L128 96 L101 108 Z" fill="#FFF7ED"/>
+    <path d="M94 172 L126 110 L160 172 Z" fill="#F97316"/>
+    <path d="M113 172 L126 134 L140 172 Z" fill="#FDE68A"/>
 
-    <path d="M74 218 L162 78 L250 218 Z" fill="#7c2d12"/>
-    <path d="M162 78 L198 134 L166 122 L130 136 Z" fill="#fff7ed"/>
-    <path d="M118 218 L162 126 L210 218 Z" fill="url(#lava)"/>
-    <path d="M92 236 C120 214 148 216 176 236 C202 256 230 252 258 230" fill="none" stroke="#ea580c" stroke-width="10" stroke-linecap="round"/>
+    <path d="M72 74 C52 54 56 34 84 26" fill="none" stroke="#7C2D12" stroke-width="8" stroke-linecap="round"/>
+    <path d="M180 74 C200 54 196 34 168 26" fill="none" stroke="#7C2D12" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="126" cy="44" r="9" fill="#EF4444"/>
 
-    <path d="M130 40 C128 18 146 2 172 -8 C166 18 194 32 184 62 C170 48 148 48 130 40 Z" fill="#ef4444" opacity="0.92"/>
-    <path d="M154 30 C156 14 170 4 188 0 C184 18 202 28 194 48 C184 40 168 38 154 30 Z" fill="#fef3c7" opacity="0.95"/>
-
-    <rect x="96" y="246" width="132" height="30" rx="15" fill="#fff7ed" stroke="#fdba74" stroke-width="2"/>
-    <text class="label" x="118" y="267">火山术式 ASR</text>
+    <path d="M64 206 H188" stroke="#EA580C" stroke-width="9" stroke-linecap="round"/>
+    <text class="note" x="64" y="232">Volcano ASR</text>
   </g>
 
-  <g transform="translate(430 58)">
-    <text class="title" x="0" y="56">火山语音转文字</text>
-    <text class="subtitle" x="2" y="98">QQ 语音 → 火山 ASR → 干净文本 → AstrBot / LLM / LivingMemory</text>
+  <g transform="translate(370 70)">
+    <text class="title" x="0" y="58">VoiceMountain</text>
+    <text class="subtitle" x="2" y="100">把 QQ 语音转成干净文本，再交给 AstrBot 继续理解与记忆</text>
 
-    <g transform="translate(2 130)">
-      <rect x="0" y="0" width="148" height="42" rx="21" fill="#ea580c"/>
-      <text class="tag" x="29" y="27">语音识别</text>
-      <rect x="166" y="0" width="150" height="42" rx="21" fill="#c2410c"/>
-      <text class="tag" x="198" y="27">自动转码</text>
-      <rect x="334" y="0" width="188" height="42" rx="21" fill="#9a3412"/>
-      <text class="tag" x="363" y="27">记忆纯文本</text>
+    <g transform="translate(2 132)">
+      <rect x="0" y="0" width="130" height="42" rx="21" fill="#FFFFFF" stroke="#FDBA74" stroke-width="2"/>
+      <text class="chip" x="28" y="27">QQ 语音</text>
+      <rect x="148" y="0" width="150" height="42" rx="21" fill="#EA580C"/>
+      <text class="chip-hot" x="177" y="27">火山 ASR</text>
+      <rect x="316" y="0" width="152" height="42" rx="21" fill="#FFFFFF" stroke="#FDBA74" stroke-width="2"/>
+      <text class="chip" x="342" y="27">纯文本注入</text>
+      <rect x="486" y="0" width="190" height="42" rx="21" fill="#FFFFFF" stroke="#FDBA74" stroke-width="2"/>
+      <text class="chip" x="515" y="27">LivingMemory 友好</text>
     </g>
 
-    <g transform="translate(0 200)">
-      <rect x="0" y="0" width="136" height="54" rx="16" fill="#fff7ed" stroke="#fdba74" stroke-width="2"/>
-      <path d="M28 35 V19 M44 40 V14 M60 35 V19 M76 42 V12 M92 34 V20" stroke="#ea580c" stroke-width="6" stroke-linecap="round"/>
-      <text class="flow" x="34" y="75">QQ 语音</text>
+    <g transform="translate(4 206)">
+      <rect x="0" y="0" width="148" height="54" rx="18" fill="#FFF7ED" stroke="#FDBA74" stroke-width="2"/>
+      <path d="M34 36 V18 M52 42 V12 M70 35 V19 M88 42 V12 M106 36 V18" stroke="#EA580C" stroke-width="6" stroke-linecap="round"/>
+      <text class="flow" x="170" y="34">→</text>
 
-      <path d="M154 27 H196" stroke="#ea580c" stroke-width="4" stroke-linecap="round"/>
-      <path d="M188 19 L202 27 L188 35" fill="none" stroke="#ea580c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="204" y="0" width="168" height="54" rx="18" fill="#FFF7ED" stroke="#FDBA74" stroke-width="2"/>
+      <path d="M236 18 H340 M236 36 H316" stroke="#9A3412" stroke-width="6" stroke-linecap="round"/>
+      <text class="flow" x="394" y="34">→</text>
 
-      <rect x="220" y="0" width="154" height="54" rx="16" fill="#fff7ed" stroke="#fdba74" stroke-width="2"/>
-      <circle cx="250" cy="27" r="13" fill="#fb923c"/>
-      <path d="M274 19 H342 M274 35 H326" stroke="#9a3412" stroke-width="5" stroke-linecap="round"/>
-      <text class="flow" x="258" y="75">ASR 转写</text>
-
-      <path d="M392 27 H434" stroke="#ea580c" stroke-width="4" stroke-linecap="round"/>
-      <path d="M426 19 L440 27 L426 35" fill="none" stroke="#ea580c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-
-      <rect x="458" y="0" width="178" height="54" rx="16" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
-      <text class="mono" x="482" y="34">Plain Text</text>
-      <text class="flow" x="485" y="75">注入用户输入</text>
+      <rect x="428" y="0" width="184" height="54" rx="18" fill="#FFEDD5" stroke="#EA580C" stroke-width="2"/>
+      <text class="flow" x="470" y="35">Plain Text</text>
     </g>
   </g>
 
-  <g transform="translate(936 60)">
-    <rect x="0" y="0" width="190" height="228" rx="30" fill="#ffffff" opacity="0.58"/>
-    <path d="M42 52 L72 14 L102 52 Z" fill="#fed7aa"/>
-    <path d="M104 100 L140 46 L176 100 Z" fill="#fdba74"/>
-    <path d="M30 148 L66 96 L102 148 Z" fill="#fb923c" opacity="0.9"/>
-    <circle cx="100" cy="112" r="58" fill="none" stroke="#ea580c" stroke-width="4" stroke-dasharray="9 12"/>
-    <path d="M66 188 H128" stroke="#7c2d12" stroke-width="8" stroke-linecap="round"/>
-    <path d="M76 174 C88 154 108 154 120 174" fill="none" stroke="#7c2d12" stroke-width="7" stroke-linecap="round"/>
-    <text class="small" x="42" y="216">火山学者气质</text>
+  <g transform="translate(1016 188)" opacity="0.8">
+    <path d="M0 70 L44 0 L88 70 Z" fill="#FDBA74"/>
+    <path d="M38 70 L66 24 L94 70 Z" fill="#F97316"/>
+    <circle cx="44" cy="98" r="28" fill="none" stroke="#EA580C" stroke-width="4" stroke-dasharray="6 9"/>
   </g>
-
-  <text class="small" x="432" y="326">突出插件链路：Base64 上传 · AMR/SILK 转码 · 两阶段注入 · 长期记忆不污染</text>
 </svg>
