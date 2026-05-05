@@ -5,6 +5,10 @@
 </p>
 
 <p align="center">
+  <sub>扁平化火山术式风格头图：突出 QQ 语音识别、自动转码、纯文本注入和 LivingMemory 友好，并融入艾雅法拉式火山学者意象。</sub>
+</p>
+
+<p align="center">
   <img src="./assets/FuckUCodeScore.svg" alt="Fuck-U-Code 代码质量评分" width="250">
 </p>
 
