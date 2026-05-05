@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
   <title id="title">火山引擎语音转文字 AstrBot 插件</title>
-  <desc id="desc">简洁扁平化 README 头图，展示 QQ 语音经过火山引擎 ASR 转为干净文本，并进入 AstrBot、LLM 和 LivingMemory 的流程。</desc>
+  <desc id="desc">简洁扁平化 README 头图，以火山、波浪线与抽象符号表现声音和文本边界被重新组织的意象。</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#FFF7ED"/>
@@ -39,35 +39,22 @@
     <circle cx="126" cy="44" r="9" fill="#EF4444"/>
 
     <path d="M64 206 H188" stroke="#EA580C" stroke-width="9" stroke-linecap="round"/>
-    <text class="note" x="64" y="232">Volcano ASR</text>
   </g>
 
   <g transform="translate(370 70)">
     <text class="title" x="0" y="58">VoiceMountain</text>
-    <text class="subtitle" x="2" y="100">把 QQ 语音转成干净文本，再交给 AstrBot 继续理解与记忆</text>
+    <text class="subtitle" x="2" y="100">让文字不再是文字，让语言不再是语言</text>
 
-    <g transform="translate(2 132)">
-      <rect x="0" y="0" width="130" height="42" rx="21" fill="#FFFFFF" stroke="#FDBA74" stroke-width="2"/>
-      <text class="chip" x="28" y="27">QQ 语音</text>
-      <rect x="148" y="0" width="150" height="42" rx="21" fill="#EA580C"/>
-      <text class="chip-hot" x="177" y="27">火山 ASR</text>
-      <rect x="316" y="0" width="152" height="42" rx="21" fill="#FFFFFF" stroke="#FDBA74" stroke-width="2"/>
-      <text class="chip" x="342" y="27">纯文本注入</text>
-      <rect x="486" y="0" width="190" height="42" rx="21" fill="#FFFFFF" stroke="#FDBA74" stroke-width="2"/>
-      <text class="chip" x="515" y="27">LivingMemory 友好</text>
-    </g>
-
-    <g transform="translate(4 206)">
-      <rect x="0" y="0" width="148" height="54" rx="18" fill="#FFF7ED" stroke="#FDBA74" stroke-width="2"/>
-      <path d="M34 36 V18 M52 42 V12 M70 35 V19 M88 42 V12 M106 36 V18" stroke="#EA580C" stroke-width="6" stroke-linecap="round"/>
-      <text class="flow" x="170" y="34">→</text>
-
-      <rect x="204" y="0" width="168" height="54" rx="18" fill="#FFF7ED" stroke="#FDBA74" stroke-width="2"/>
-      <path d="M236 18 H340 M236 36 H316" stroke="#9A3412" stroke-width="6" stroke-linecap="round"/>
-      <text class="flow" x="394" y="34">→</text>
-
-      <rect x="428" y="0" width="184" height="54" rx="18" fill="#FFEDD5" stroke="#EA580C" stroke-width="2"/>
-      <text class="flow" x="470" y="35">Plain Text</text>
+    <g transform="translate(4 204)">
+      <text class="flow" x="0" y="42">Plain Text</text>
+      <g transform="translate(198 0)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M0 28 C24 4 48 4 72 28 S120 52 144 28 S192 4 216 28 S264 52 288 28 S336 4 360 28 S408 52 432 28" stroke="#EA580C" stroke-width="8" opacity="0.78"/>
+        <path d="M0 28 C24 4 48 4 72 28 S120 52 144 28 S192 4 216 28 S264 52 288 28 S336 4 360 28 S408 52 432 28" stroke="#FFF7ED" stroke-width="3" opacity="0.9"/>
+        <circle cx="0" cy="28" r="7" fill="#9A3412" stroke="none"/>
+        <circle cx="144" cy="28" r="7" fill="#F97316" stroke="none"/>
+        <circle cx="288" cy="28" r="7" fill="#F97316" stroke="none"/>
+        <circle cx="432" cy="28" r="7" fill="#9A3412" stroke="none"/>
+      </g>
     </g>
   </g>
 

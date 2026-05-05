@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <sub>简洁扁平化头图：突出 QQ 语音识别、火山 ASR、纯文本注入和 LivingMemory 友好，并保留火山学者意象。</sub>
+
 </p>
 
 <p align="center">
