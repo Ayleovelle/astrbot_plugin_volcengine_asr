@@ -1,5 +1,15 @@
 # 更新说明
 
+## v2.1.3 - 修复 GitHub Release 发布通道
+
+### 主要变更
+
+- 规避 `v2.1.2` 在 GitHub 侧被 immutable release 机制占用后无法发布的问题，改用新的 `v2.1.3` tag 重新发布。
+- 重新生成 UTF-8 发布说明，避免草稿 Release 正文出现乱码。
+- 重新构建 `output/astrbot_plugin_volcengine_asr.zip`，发布包内 `metadata.yaml` 已更新为 `2.1.3`。
+- 插件运行时代码沿用 `2.1.2` 的 QQ AMR 取回、OneBot `get_record` 兜底、干净 `provider_request` 和消息链原地清理逻辑。
+- 安装时仍然只应上传 Release 附件 `astrbot_plugin_volcengine_asr.zip`，不要上传仓库根目录旧 zip 或 GitHub 绿色 Code 源码 zip。
+
 ## v2.1.2 - 绕过内置 agent 媒体扫描
 
 ### 主要变更

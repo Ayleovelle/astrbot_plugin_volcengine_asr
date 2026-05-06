@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.1.2-brightgreen.svg" alt="Version 2.1.2">
+  <img src="https://img.shields.io/badge/Version-2.1.3-brightgreen.svg" alt="Version 2.1.3">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License MIT">
@@ -125,6 +125,14 @@ VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest
 - 情绪判断前会先清理当前语音 `Record`，再把转写文本和可用上下文交给情绪判断 LLM。
 - 识别失败、配置错误、未听清直接提示、`reply_transcription=true` 直接回复转写等不需要默认 LLM 继续处理原语音的路径，会先 `stop_event()`，再发送回复。
 - 这样可以避免后续 agent 或媒体转换逻辑继续读取裸 `.amr` 文件名，减少 `not a valid file: xxx.amr`。
+
+## 2.1.3 发布通道修复
+
+`2.1.3` 不改变语音识别主工作流，重点修复 GitHub Release 发布通道：`v2.1.2` 在 GitHub 侧已被 immutable release 机制占用，继续发布会出现 `tag name was used by an immutable release`。本版本使用新的 `v2.1.3` tag 重新构建发布包，并重新生成 UTF-8 发布说明，避免草稿页面正文乱码和不可变 tag 冲突。
+
+- 插件代码沿用 `2.1.2` 的 QQ AMR 取回、`get_record` 兜底、干净 `provider_request` 与消息链原地清理逻辑。
+- Release 附件仍只上传 `output/astrbot_plugin_volcengine_asr.zip`，不要上传仓库根目录旧 zip。
+- 如果你看到旧 `v2.1.2` 草稿，不要继续发布它；请使用 `v2.1.3` Release。
 
 ## 2.1.2 干净 ProviderRequest 修复
 
@@ -982,7 +990,7 @@ python3 scripts/build_release_zip.py
 
 ## 版本说明
 
-当前版本：`2.1.2`
+当前版本：`2.1.3`
 
 本版本重点：
 
