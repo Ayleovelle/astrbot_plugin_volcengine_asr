@@ -11,7 +11,7 @@ import sys
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import unquote, urlparse
 
 import httpx
@@ -21,6 +21,14 @@ from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.provider import ProviderRequest
 from astrbot.api.star import Context, Star
+
+try:
+    on_agent_begin = filter.on_agent_begin
+except AttributeError:
+
+    def on_agent_begin(*args, **kwargs):
+        return lambda func: func
+
 
 try:
     from astrbot.core.star.star import StarMetadata
@@ -42,7 +50,7 @@ VOLC_FLASH_ENDPOINT = (
 VOLC_RESOURCE_ID = "volc.bigasr.auc_turbo"
 VOLC_SUCCESS_CODE = "20000000"
 VOLC_SILENT_AUDIO_CODE = "20000003"
-PLUGIN_VERSION = "2.1.7"
+PLUGIN_VERSION = "2.1.8"
 PLUGIN_REPO_URL = "https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr"
 SUPPORTED_AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".opus"}
 TRANSCODE_HINT_EXTS = {".amr", ".silk", ".slk", ".m4a", ".aac", ".flac", ".webm"}
@@ -223,6 +231,39 @@ class EmotionJudgement:
             "context_support": self.context_support,
             "reason": self.reason,
         }
+
+
+@dataclass(slots=True)
+class EmotionWeightingInput:
+    transcript_chars: int
+    confidence: float
+    emotion_weights: dict[str, float]
+    voice_text_support: float
+    context_support: float
+    max_respect_weight: float
+
+
+class EmotionWeightingPolicy(Protocol):
+    def compute_respect_weight(self, data: EmotionWeightingInput) -> float:
+        ...
+
+
+class DefaultEmotionWeightingPolicy:
+    def compute_respect_weight(self, data: EmotionWeightingInput) -> float:
+        confidence = _clamp_float(data.confidence)
+        voice_text_support = _clamp_float(data.voice_text_support)
+        context_support = _clamp_float(data.context_support)
+        max_respect_weight = _clamp_float(data.max_respect_weight)
+        certainty = _entropy_certainty(data.emotion_weights)
+        length_factor = min(1.0, math.log(1 + max(0, data.transcript_chars)) / math.log(81))
+        evidence = length_factor * (0.7 * voice_text_support + 0.3 * context_support)
+        respect_weight = max_respect_weight * (0.5 * confidence + 0.3 * certainty + 0.2 * evidence)
+        if data.transcript_chars < 12:
+            respect_weight = min(respect_weight, 0.25)
+        return round(_clamp_float(respect_weight, 0.0, max_respect_weight), 3)
+
+
+DEFAULT_EMOTION_WEIGHTING_POLICY = DefaultEmotionWeightingPolicy()
 
 
 @dataclass(slots=True)
@@ -733,7 +774,11 @@ def _sanitize_content_value(value: Any, fallback_text: str) -> Any:
                 "records",
             } and _looks_like_audio_reference(item):
                 continue
-            if key_text in {"message", "message_chain", "raw_message"}:
+            if key_text in {
+                "message",
+                "message_chain",
+                "raw_message",
+            }:
                 cleaned[key] = fallback_text if key_text == "raw_message" else _plain_message_chain(fallback_text)
                 continue
             item_cleaned = _sanitize_content_value(item, fallback_text)
@@ -820,12 +865,15 @@ def _sanitize_event_cached_content(event: AstrMessageEvent, text: str) -> None:
                 "content",
                 "context",
                 "contexts",
+                "data",
                 "input",
                 "message",
                 "message_chain",
                 "messages",
+                "original_message",
                 "raw_message",
                 "request",
+                "segments",
             }:
                 container[key] = _sanitize_content_value(container[key], text)
             elif key_text in {"audio", "audio_url", "audio_urls", "audios", "file", "files", "record", "records"}:
@@ -841,6 +889,20 @@ def _set_clean_provider_request(event: AstrMessageEvent, prompt: str) -> None:
     req = _build_clean_provider_request(prompt)
     if req is not None:
         event.set_extra("provider_request", req)
+
+
+def _ensure_clean_voice_event_for_agent(event: AstrMessageEvent) -> None:
+    memory_text = event.get_extra(ASR_EXTRA_MEMORY_TEXT, "")
+    llm_text = event.get_extra(ASR_EXTRA_LLM_TEXT, "")
+    if not isinstance(memory_text, str) or not memory_text.strip():
+        return
+    memory_text = memory_text.strip()
+    llm_text = llm_text.strip() if isinstance(llm_text, str) and llm_text.strip() else memory_text
+    _replace_event_message_with_plain_text(event, memory_text)
+    _sanitize_event_cached_content(event, memory_text)
+    req = event.get_extra("provider_request", None)
+    if _looks_like_provider_request(req):
+        _sanitize_provider_request(req, memory_text, llm_text)
 
 
 def _build_clean_provider_request(prompt: str) -> Any | None:
@@ -1038,18 +1100,19 @@ def _compute_emotion_respect_weight(
     voice_text_support: float,
     context_support: float,
     max_respect_weight: float,
+    weighting_policy: EmotionWeightingPolicy | None = None,
 ) -> float:
-    confidence = _clamp_float(confidence)
-    voice_text_support = _clamp_float(voice_text_support)
-    context_support = _clamp_float(context_support)
-    max_respect_weight = _clamp_float(max_respect_weight)
-    certainty = _entropy_certainty(emotion_weights)
-    length_factor = min(1.0, math.log(1 + max(0, transcript_chars)) / math.log(81))
-    evidence = length_factor * (0.7 * voice_text_support + 0.3 * context_support)
-    respect_weight = max_respect_weight * (0.5 * confidence + 0.3 * certainty + 0.2 * evidence)
-    if transcript_chars < 12:
-        respect_weight = min(respect_weight, 0.25)
-    return round(_clamp_float(respect_weight, 0.0, max_respect_weight), 3)
+    policy = weighting_policy or DEFAULT_EMOTION_WEIGHTING_POLICY
+    return policy.compute_respect_weight(
+        EmotionWeightingInput(
+            transcript_chars=transcript_chars,
+            confidence=confidence,
+            emotion_weights=emotion_weights,
+            voice_text_support=voice_text_support,
+            context_support=context_support,
+            max_respect_weight=max_respect_weight,
+        )
+    )
 
 
 def _render_named_placeholders(template: str, values: dict[str, str]) -> str:
@@ -1084,6 +1147,7 @@ def _build_emotion_judgement(
     *,
     transcript_chars: int,
     max_respect_weight: float,
+    weighting_policy: EmotionWeightingPolicy | None = None,
 ) -> EmotionJudgement:
     weights = _normalize_emotion_weights(data.get("emotion_weights"))
     label = str(data.get("label") or "").strip().lower()
@@ -1101,6 +1165,7 @@ def _build_emotion_judgement(
         voice_text_support=voice_text_support,
         context_support=context_support,
         max_respect_weight=max_respect_weight,
+        weighting_policy=weighting_policy,
     )
     reason = str(data.get("reason") or "").strip().replace("\n", " ")[:160]
     return EmotionJudgement(
@@ -1395,6 +1460,7 @@ class VolcengineAsrPlugin(Star):
             "emotion_prompt_template",
             DEFAULT_EMOTION_PROMPT_TEMPLATE,
         ) or DEFAULT_EMOTION_PROMPT_TEMPLATE
+        self.emotion_weighting_policy: EmotionWeightingPolicy = DEFAULT_EMOTION_WEIGHTING_POLICY
         self.voice_prompt_template = _config_str(
             self.config,
             "voice_prompt_template",
@@ -1723,6 +1789,17 @@ class VolcengineAsrPlugin(Star):
         req.prompt = new_prompt
         event.set_extra("volcengine_asr_llm_prompt_applied", True)
         logger.info("已在 LLM 请求阶段应用语音提示词模板，长期记忆仍保留干净转写文本。")
+
+    @on_agent_begin(priority=100)
+    async def ensure_voice_event_clean_before_agent(
+        self,
+        event: AstrMessageEvent,
+        run_context: Any | None = None,
+    ) -> None:
+        """在 AstrBot 构建 agent 前兜底清理旧 Record 缓存。"""
+        if event.get_extra(ASR_EXTRA_EMOTION_INTERNAL_CALL, False):
+            return
+        _ensure_clean_voice_event_for_agent(event)
 
     def _allow_event(self, event: AstrMessageEvent) -> bool:
         message_obj = getattr(event, "message_obj", None)
@@ -2174,6 +2251,7 @@ class VolcengineAsrPlugin(Star):
             data,
             transcript_chars=len(transcription_text),
             max_respect_weight=self.emotion_max_respect_weight,
+            weighting_policy=self.emotion_weighting_policy,
         )
         event.set_extra(ASR_EXTRA_EMOTION_APPLIED, True)
         logger.info(

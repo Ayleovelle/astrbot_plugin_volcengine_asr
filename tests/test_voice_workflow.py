@@ -13,9 +13,11 @@ from astrbot_plugin_volcengine_asr.main import (
     ASR_EXTRA_UNCLEAR,
     DEFAULT_UNCLEAR_MEMORY_TEXT,
     AsrResult,
+    EmotionWeightingInput,
     RecognitionBatch,
     UserVisibleError,
     VolcengineAsrPlugin,
+    _ensure_clean_voice_event_for_agent,
 )
 
 
@@ -242,6 +244,39 @@ def test_on_message_cleans_record_before_emotion_llm_call():
     assert event.get_extra("provider_request").prompt == event.get_extra(ASR_EXTRA_LLM_TEXT)
 
 
+def test_on_message_uses_plugin_emotion_weighting_policy():
+    record = Comp.Record(file="voice.amr")
+    event = _FakeEvent([record])
+    plugin = _make_plugin(enable_emotion_analysis=True)
+
+    class _FixedPolicy:
+        def compute_respect_weight(self, data: EmotionWeightingInput) -> float:
+            assert data.transcript_chars == len("worry")
+            return 0.111
+
+    async def fake_recognize_voice_inputs(_voice_inputs):
+        return RecognitionBatch(results=[AsrResult(text="worry", request_id="req-1")], errors=[])
+
+    class _FakeContext:
+        async def get_current_chat_provider_id(self, umo=None):
+            return "provider-default"
+
+        async def llm_generate(self, **kwargs):
+            return (
+                '{"label":"anxious","emotion_weights":{"anxious":1.0},'
+                '"confidence":1.0,"voice_text_support":1.0,"context_support":1.0}'
+            )
+
+    plugin.emotion_weighting_policy = _FixedPolicy()
+    plugin._recognize_voice_inputs = fake_recognize_voice_inputs
+    plugin.context = _FakeContext()
+
+    outputs = asyncio.run(_collect_asyncgen(plugin.on_message(event)))
+
+    assert len(outputs) == 1
+    assert event.get_extra(ASR_EXTRA_EMOTION_RESULT)["respect_weight"] == 0.111
+
+
 def test_apply_voice_prompt_template_takes_over_when_prompt_does_not_contain_memory_text():
     plugin = _make_plugin()
     event = _FakeEvent()
@@ -398,6 +433,67 @@ def test_find_records_reads_event_and_message_obj_extra_caches():
     event.message_obj.extras["input"] = {"message": [record_b]}
 
     assert VolcengineAsrPlugin._find_records(event) == [record_b, record_a]
+
+
+def test_agent_begin_cleanup_removes_records_from_extra_cache_shapes():
+    event = _FakeEvent()
+    event.message = []
+    event.message_chain = []
+    event.raw_message = []
+    event.message_obj.message = []
+    event.message_obj.message_chain = []
+    event.message_obj.raw_message = []
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "hello")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "hello[voice prompt]")
+    event.extras["data"] = {"message": [{"type": "record", "data": {"file": "from-data.amr"}}]}
+    event.extras["segments"] = [{"type": "record", "data": {"file": "from-segments.amr"}}]
+    event.message_obj.extras["original_message"] = [
+        {"type": "record", "data": {"file": "from-original.amr"}}
+    ]
+    event.extras["provider_request"] = _FakeProviderRequest(prompt="hello")
+    event.extras["provider_request"].messages.append(
+        {"role": "user", "content": [{"type": "record", "data": {"file": "from-req.amr"}}]}
+    )
+
+    assert len(VolcengineAsrPlugin._find_records(event)) >= 3
+
+    _ensure_clean_voice_event_for_agent(event)
+
+    assert VolcengineAsrPlugin._find_records(event) == []
+    assert event.message_str == "hello"
+    assert event.message_obj.message[0].text == "hello"
+    provider_request = event.get_extra("provider_request")
+    assert provider_request.prompt == "hello"
+    assert provider_request.audio_urls == []
+    assert provider_request.files == []
+
+
+def test_on_message_success_cleans_extra_cache_shapes_before_agent_stage():
+    record = Comp.Record(file="voice.amr")
+    event = _FakeEvent([record])
+    event.extras["data"] = {"message": [{"type": "record", "data": {"file": "from-data.amr"}}]}
+    event.extras["segments"] = [{"type": "record", "data": {"file": "from-segments.amr"}}]
+    event.message_obj.extras["original_message"] = [
+        {"type": "record", "data": {"file": "from-original.amr"}}
+    ]
+    event.message_obj.extras["request"] = {
+        "messages": [{"content": [{"type": "record", "data": {"file": "from-request.amr"}}]}]
+    }
+    plugin = _make_plugin()
+
+    async def fake_recognize_voice_inputs(_voice_inputs):
+        return RecognitionBatch(results=[AsrResult(text="hello", request_id="req-1")], errors=[])
+
+    plugin._recognize_voice_inputs = fake_recognize_voice_inputs
+
+    outputs = asyncio.run(_collect_asyncgen(plugin.on_message(event)))
+
+    assert len(outputs) == 1
+    assert VolcengineAsrPlugin._find_records(event) == []
+    assert event.message_obj.message[0].text == "hello"
+    provider_request = event.get_extra("provider_request")
+    assert provider_request.prompt == "hello[voice prompt]"
+    assert provider_request.audio_urls == []
 
 
 def test_build_audio_payload_url_mode_does_not_trust_amr_url():

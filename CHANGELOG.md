@@ -1,5 +1,17 @@
 # 更新说明
 
+## v2.1.8 - 修复 agent 缓存残留并抽出情绪权重接口
+
+### 主要变更
+
+- 修复 `agent_sub_stages.internal:402` 仍可能报 `not a valid file: xxx.amr` 的后段残留问题。
+- 事件缓存清理面与 `_find_records()` 的发现面进一步对齐，新增清理 `event.extras` / `message_obj.extras` 中的 `data`、`segments`、`original_message` 等异形缓存字段。
+- 新增 `on_agent_begin` 兜底清理，在 AstrBot 构建 agent 前再次净化已注入语音事件和已存在的干净 `ProviderRequest`。
+- 新增 `EmotionWeightingInput`、`EmotionWeightingPolicy`、`DefaultEmotionWeightingPolicy`，把情绪 `respect_weight` 计算公式抽成可替换接口。
+- `_compute_emotion_respect_weight()` 继续保留为兼容包装器，默认策略完全沿用旧公式；分支开发可替换 `self.emotion_weighting_policy`，避免改动 ASR 主流程。
+- 新增回归测试覆盖识别成功后 extras 异形缓存、provider request 音频残留、agent 前兜底清理，以及自定义情绪权重策略注入。
+- 本版本仍不能早于官方 `preprocess_stage` 执行；`preprocess_stage` warning 需要继续从 AstrBot/NapCat/Docker 文件路径侧排查。
+
 ## v2.1.7 - 加固异形缓存 Record 发现
 
 ### 主要变更

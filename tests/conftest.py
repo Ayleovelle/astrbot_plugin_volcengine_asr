@@ -29,6 +29,9 @@ class _Filter:
     def on_llm_request(self, *args, **kwargs):
         return lambda func: func
 
+    def on_agent_begin(self, *args, **kwargs):
+        return lambda func: func
+
 
 class _Plain:
     def __init__(self, text):

@@ -10,6 +10,7 @@ from astrbot_plugin_volcengine_asr.main import (
     ASR_EXTRA_TEXT,
     ASR_EXTRA_UNCLEAR,
     AsrResult,
+    EmotionWeightingInput,
     EmotionJudgement,
     UserVisibleError,
     VolcengineAsrPlugin,
@@ -433,6 +434,38 @@ def test_compute_emotion_respect_weight_uses_confidence_certainty_and_caps_short
     assert short <= 0.25
 
 
+def test_compute_emotion_respect_weight_accepts_custom_policy():
+    class FixedPolicy:
+        def __init__(self):
+            self.received = None
+
+        def compute_respect_weight(self, data: EmotionWeightingInput) -> float:
+            self.received = data
+            return 0.123
+
+    policy = FixedPolicy()
+
+    result = _compute_emotion_respect_weight(
+        transcript_chars=80,
+        confidence=0.9,
+        emotion_weights={"anxious": 1.0},
+        voice_text_support=0.8,
+        context_support=0.2,
+        max_respect_weight=0.6,
+        weighting_policy=policy,
+    )
+
+    assert result == 0.123
+    assert policy.received == EmotionWeightingInput(
+        transcript_chars=80,
+        confidence=0.9,
+        emotion_weights={"anxious": 1.0},
+        voice_text_support=0.8,
+        context_support=0.2,
+        max_respect_weight=0.6,
+    )
+
+
 def test_build_emotion_judgement_uses_local_respect_weight_formula():
     judgement = _build_emotion_judgement(
         {
@@ -452,6 +485,27 @@ def test_build_emotion_judgement_uses_local_respect_weight_formula():
     assert judgement.label == "anxious"
     assert 0 < judgement.respect_weight <= 0.6
     assert "\n" not in judgement.reason
+
+
+def test_build_emotion_judgement_accepts_weighting_policy():
+    class BranchPolicy:
+        def compute_respect_weight(self, data: EmotionWeightingInput) -> float:
+            return round(data.max_respect_weight / 2, 3)
+
+    judgement = _build_emotion_judgement(
+        {
+            "label": "happy",
+            "emotion_weights": {"happy": 1.0},
+            "confidence": 0.2,
+            "voice_text_support": 0.1,
+            "context_support": 0.1,
+        },
+        transcript_chars=20,
+        max_respect_weight=0.6,
+        weighting_policy=BranchPolicy(),
+    )
+
+    assert judgement.respect_weight == 0.3
 
 
 def test_build_emotion_prompt_preserves_json_braces():
