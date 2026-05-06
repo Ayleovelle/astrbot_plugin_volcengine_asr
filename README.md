@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.1.11-brightgreen.svg" alt="Version 2.1.11">
+  <img src="https://img.shields.io/badge/Version-2.1.12-brightgreen.svg" alt="Version 2.1.12">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License MIT">
@@ -126,6 +126,15 @@ VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest
 - 识别失败、配置错误、未听清直接提示、`reply_transcription=true` 直接回复转写等不需要默认 LLM 继续处理原语音的路径，会先 `stop_event()`，再发送回复。
 - 这样可以避免后续 agent 或媒体转换逻辑继续读取裸 `.amr` 文件名，减少 `not a valid file: xxx.amr`。
 
+## 2.1.12 上传安装包结构修复
+
+`2.1.12` 不改 ASR、ffmpeg、agent 清理和情绪判断主链路，只修复 Release zip 的上传安装结构。AstrBot v4.24.2 的上传解压器会把 zip 第一项当作外层目录，如果发布包顶层直接平铺 `CHANGELOG.md`、`main.py`、`metadata.yaml`，就可能在安装时触发 `[Errno 20] Not a directory: .../CHANGELOG.md`。
+
+- Release zip 顶层现在固定为一个 `astrbot_plugin_volcengine_asr/` 目录。
+- `metadata.yaml`、`main.py`、`_conf_schema.json`、`requirements.txt`、`README.md`、`CHANGELOG.md` 和内置 `ffmpeg` 都放在该目录内。
+- 打包脚本会校验 zip 第一项、顶层目录、必需文件和 `bin/linux-x86_64/ffmpeg` 的可执行权限。
+- `v2.1.11` 的运行期修复仍然保留；新安装和升级请使用 `v2.1.12` Release 附件。
+
 ## 2.1.11 ProviderRequest 活对象保护修复
 
 `2.1.11` 继续修复 AstrBot v4.24.2 的 `agent request` 阶段缓存残留。真实环境里，如果旧 `.amr` 残留藏在 `event.extras["request"]`、`event.extras["req"]`、`message_obj.extras["llm_request"]` 或 mapping 形态的 `run_context` 中，旧版本可能继续触发 `not a valid file: xxx.amr`。进一步加固时，如果把 AstrBot 的 `ProviderRequest` 活对象替换成普通 `dict`，又会触发 `'dict' object has no attribute 'model_dump_for_context'`。
@@ -139,7 +148,7 @@ VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest
 
 `2.1.10` 的运行时代码沿用 `2.1.9` 的 agent 前未知缓存与 `run_context` 清理加固。由于 GitHub 对已创建的 `v2.1.9` Release 触发 immutable release 限制，无法再为该 Release 补上传插件 zip 附件，所以正式可下载版本改为 `v2.1.10`。
 
-- `v2.1.10` 已被 `v2.1.11` 取代；新安装和升级请使用最新 Release 附件。
+- `v2.1.10` 已被 `v2.1.12` 取代；新安装和升级请使用最新 Release 附件。
 - 不要安装 GitHub 自动生成的 Source code zip。
 - `v2.1.9` tag 仅保留为历史提交点，实际安装请使用最新 Release。
 
@@ -257,27 +266,30 @@ flowchart LR
 6. 重载插件或重启 AstrBot。
 7. 打开插件配置页，填写火山引擎鉴权信息。
 
-Release zip 根目录应直接包含：
-
-```text
-metadata.yaml
-main.py
-_conf_schema.json
-requirements.txt
-README.md
-assets/VoiceMountain.svg
-assets/FuckUCodeScore.svg
-bin/linux-x86_64/ffmpeg
-```
-
-如果 zip 外面又套了一层同名目录，例如：
+Release zip 顶层应只有一个插件目录，目录内包含插件文件：
 
 ```text
 astrbot_plugin_volcengine_asr/
-└── metadata.yaml
+├── metadata.yaml
+├── main.py
+├── _conf_schema.json
+├── requirements.txt
+├── README.md
+├── CHANGELOG.md
+├── assets/VoiceMountain.svg
+├── assets/FuckUCodeScore.svg
+└── bin/linux-x86_64/ffmpeg
 ```
 
-AstrBot 可能会报找不到 `metadata.yaml`。这种情况通常说明你下载的是源码 zip，或者自己打包时目录层级错了。
+不要把插件文件直接平铺在 zip 顶层，例如：
+
+```text
+CHANGELOG.md
+main.py
+metadata.yaml
+```
+
+AstrBot v4.24.2 上传安装器会把 zip 的第一项当成外层目录处理。若第一项是 `CHANGELOG.md` 这类文件，就可能报 `[Errno 20] Not a directory: .../CHANGELOG.md`。
 
 ### 方式二：从 GitHub 仓库安装
 
@@ -817,18 +829,19 @@ notify_asr_error = true
 
 ## 常见问题与排障
 
-### 上传 zip 后提示找不到 metadata.yaml
+### 上传 zip 后提示找不到 metadata.yaml 或 Not a directory: CHANGELOG.md
 
-请确认你上传的是 Release 页面里的 `astrbot_plugin_volcengine_asr.zip`，并且 zip 根目录直接包含：
+请确认你上传的是 Release 页面里的 `astrbot_plugin_volcengine_asr.zip`，并且 zip 顶层只有一个插件目录：
 
 ```text
-metadata.yaml
-main.py
-_conf_schema.json
-requirements.txt
+astrbot_plugin_volcengine_asr/
+├── metadata.yaml
+├── main.py
+├── _conf_schema.json
+└── requirements.txt
 ```
 
-不要使用 GitHub 绿色 Code 按钮下载的源码 zip 代替 Release zip。
+不要使用 GitHub 绿色 Code 按钮下载的源码 zip 代替 Release zip，也不要自己把 `CHANGELOG.md`、`main.py`、`metadata.yaml` 直接平铺压缩。平铺包在 AstrBot v4.24.2 上传安装器中可能触发 `Not a directory: CHANGELOG.md`。
 
 ### 提示需要 ffmpeg
 
@@ -992,7 +1005,7 @@ notify_asr_error = true
 | 项目 | Release zip | GitHub 仓库安装 | GitHub 源码 zip |
 | :--- | :--- | :--- | :--- |
 | AstrBot 推荐程度 | 推荐 | 可用 | 不推荐直接当发布包用 |
-| 根目录是否直接含 `metadata.yaml` | 是 | 是 | 通常外层会套目录 |
+| zip/仓库入口 | 顶层单插件目录，目录内含 `metadata.yaml` | 仓库根目录直接含 `metadata.yaml` | 通常外层会套源码目录 |
 | 是否带内置 `ffmpeg` | 是 | 否 | 否 |
 | 适合 Docker / VPS | 是 | 依赖环境 | 依赖环境 |
 | 适合普通用户 | 最适合 | 适合能处理依赖的人 | 容易装错 |
@@ -1032,7 +1045,7 @@ notify_asr_error = true
 - 仓库根目录用于支持 AstrBot 从 GitHub 仓库地址安装。
 - `astrbot_plugin_volcengine_asr/` 用于生成 Release zip。
 - 根目录 `main.py` 是轻量入口，插件完整实现位于 `astrbot_plugin_volcengine_asr/main.py`。
-- Release zip 根目录不会额外套一层同名目录。
+- Release zip 顶层固定套一层 `astrbot_plugin_volcengine_asr/` 插件目录，用于兼容 AstrBot 上传安装器。
 - Release zip 会包含 Linux x86_64 / amd64 内置 `ffmpeg`。
 
 ## 验证与维护说明
@@ -1051,7 +1064,7 @@ python3 -c "import json,pathlib; [json.loads(pathlib.Path(p).read_text(encoding=
 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q -p no:cacheprovider tests
 ```
 
-如果本地没有 `pytest`，至少应确保纯函数 helper 的测试逻辑能运行，配置 JSON 能解析，Release zip 根目录结构正确。
+如果本地没有 `pytest`，至少应确保纯函数 helper 的测试逻辑能运行，配置 JSON 能解析，Release zip 顶层目录结构正确。
 
 构建 Release zip：
 
@@ -1059,7 +1072,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q -p no:cache
 python3 scripts/build_release_zip.py
 ```
 
-发布时只上传 `output/astrbot_plugin_volcengine_asr.zip`。根目录旧 zip、`_release_body.json`、`_release_draft.json` 都不是 2.1.0 的发布依据。
+发布时只上传 `output/astrbot_plugin_volcengine_asr.zip`。根目录旧 zip、`_release_body.json`、`_release_draft.json` 都不是发布依据。
 
 ## Web UI 接口预留
 
@@ -1090,7 +1103,7 @@ python3 scripts/build_release_zip.py
 
 ## 版本说明
 
-当前版本：`2.1.11`
+当前版本：`2.1.12`
 
 本版本重点：
 

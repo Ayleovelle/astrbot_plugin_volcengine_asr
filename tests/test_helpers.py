@@ -1,5 +1,6 @@
 import asyncio
 import subprocess
+import zipfile
 from contextlib import contextmanager
 
 import astrbot_plugin_volcengine_asr.main as plugin_main
@@ -33,6 +34,7 @@ from astrbot_plugin_volcengine_asr.main import (
     _sanitize_provider_request,
 )
 import astrbot.api.message_components as Comp
+from scripts.build_release_zip import PACKAGE_DIR, build_zip
 from scripts.update_fuck_u_code_score import build_svg, extract_score, find_score, normalize_score
 
 
@@ -132,6 +134,21 @@ def test_render_prompt_template_supports_angle_placeholder_with_braces_text():
     )
 
     assert rendered == "今天聊 {AI} 可以吗[请自然回复]"
+
+
+def test_release_zip_is_wrapped_for_astrbot_upload_installer():
+    path = build_zip()
+
+    with zipfile.ZipFile(path) as zf:
+        names = zf.namelist()
+        top_level = {name.split("/", 1)[0] for name in names if name}
+        ffmpeg_info = zf.getinfo(f"{PACKAGE_DIR}/bin/linux-x86_64/ffmpeg")
+
+    assert names[0] == f"{PACKAGE_DIR}/"
+    assert top_level == {PACKAGE_DIR}
+    assert f"{PACKAGE_DIR}/metadata.yaml" in names
+    assert f"{PACKAGE_DIR}/main.py" in names
+    assert (ffmpeg_info.external_attr >> 16) & 0o777777 == 0o100755
 
 
 def test_render_prompt_template_supports_format_fields():

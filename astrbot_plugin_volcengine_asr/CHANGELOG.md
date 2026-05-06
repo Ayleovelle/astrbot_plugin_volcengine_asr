@@ -1,5 +1,16 @@
 # 更新说明
 
+## v2.1.12 - 修复 AstrBot 上传安装包目录结构
+
+### 主要变更
+
+- 修复 Release zip 顶层平铺 `CHANGELOG.md`、`main.py`、`metadata.yaml` 时，AstrBot v4.24.2 上传安装器可能报 `[Errno 20] Not a directory: .../CHANGELOG.md` 的问题。
+- Release zip 现在固定以 `astrbot_plugin_volcengine_asr/` 作为唯一顶层目录，插件文件放在该目录内，兼容 AstrBot 的 `updator.unzip_file()` 解压逻辑。
+- `scripts/build_release_zip.py` 和旧 `_pack.py` 均改为生成单目录包裹结构，并校验 zip 第一项、顶层目录、必需文件和内置 `ffmpeg` 可执行权限。
+- README 同步修正上传安装说明：WebUI 上传 Release zip 要用单目录包裹结构；仓库安装仍使用仓库根目录的轻量入口文件。
+- 新增回归测试锁定 Release zip 结构，避免后续又打出平铺包。
+- 本版本不改变 `v2.1.11` 的 ASR、ffmpeg、ProviderRequest 活对象保护、agent 缓存清理和情绪权重接口逻辑。
+
 ## v2.1.11 - 修复 ProviderRequest 活对象保护与 agent request 缓存清理
 
 ### 主要变更
@@ -210,7 +221,7 @@
 
 ### 安装包说明
 
-- Release zip 根目录直接包含插件文件，不额外套同名目录。
+- Release zip 顶层固定为一个插件目录，插件文件放在该目录内。
 - Release zip 包含 Linux x86_64/amd64 内置 `ffmpeg`，适合 Docker 或 VPS 环境。
 - 不要使用 GitHub 绿色 Code 按钮下载的源码 zip 代替 Release zip。
 
@@ -220,7 +231,7 @@
 - 配置 JSON 校验通过。
 - README 配置项覆盖检查通过。
 - helper 测试通过。
-- Release zip 根目录结构、版本和内置 `ffmpeg` 校验通过。
+- Release zip 顶层目录结构、版本和内置 `ffmpeg` 校验通过。
 
 ## v1.4.7 - LivingMemory 兼容重构
 
