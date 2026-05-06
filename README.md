@@ -392,6 +392,57 @@ emotion_max_respect_weight_percent = 60
 emotion_fail_open = true
 ```
 
+<details>
+<summary>展开：测试服务器 10 次参考值（deepseek-v4-flash）</summary>
+
+测试口径：本测试使用测试服务器中已配置的 `deepseek/deepseek-v4-flash`，测试环境不加载其它插件。为排除聊天主链路影响，没有走 AstrBot 聊天消息链，而是直接调用同一模型的情绪判断 prompt；因此它衡量的是 `enable_emotion_analysis=true` 后额外增加的那一次情绪 LLM 调用，不包含 ASR、主 LLM 正常回复、TTS 或其它插件耗时。结果仅供参考。
+
+固定测试输入：
+
+| 项目 | 值 |
+| :--- | :--- |
+| 测试模型 | `deepseek-v4-flash` |
+| 测试次数 | 关闭时额外调用为 0；开启组 10 次有效样本 |
+| 语音转写文本长度 | 20 个中文字符 |
+| 上下文长度 | 27 个中文字符 |
+| 情绪判断 prompt 长度 | 661 个字符 |
+| JSON 成功率 | 10 / 10 |
+
+增量结果：
+
+| 配置 | 额外情绪 LLM 调用 | prompt tokens 增量 | completion tokens 增量 | total tokens 增量 | 额外延迟 |
+| :--- | :---: | ---: | ---: | ---: | ---: |
+| `enable_emotion_analysis=false` | 0 次 | 0 | 0 | 0 | 0 ms |
+| `enable_emotion_analysis=true` | 1 次 / 条语音 | 平均 195 | 平均 324.1 | 平均 519.1 | 平均 4788.8 ms |
+
+10 次开启组明细：
+
+| 次数 | 延迟 ms | prompt tokens | completion tokens | total tokens |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 9147.2 | 195 | 485 | 680 |
+| 2 | 5324.0 | 195 | 384 | 579 |
+| 3 | 2943.1 | 195 | 200 | 395 |
+| 4 | 3626.1 | 195 | 283 | 478 |
+| 5 | 3576.1 | 195 | 247 | 442 |
+| 6 | 2625.8 | 195 | 182 | 377 |
+| 7 | 8764.9 | 195 | 646 | 841 |
+| 8 | 3781.4 | 195 | 247 | 442 |
+| 9 | 4421.6 | 195 | 310 | 505 |
+| 10 | 3677.6 | 195 | 257 | 452 |
+
+统计摘要：
+
+| 指标 | 最小值 | 最大值 | 平均值 | 中位数 |
+| :--- | ---: | ---: | ---: | ---: |
+| 延迟 ms | 2625.8 | 9147.2 | 4788.8 | 3729.5 |
+| prompt tokens | 195 | 195 | 195.0 | 195.0 |
+| completion tokens | 182 | 646 | 324.1 | 270.0 |
+| total tokens | 377 | 841 | 519.1 | 465.0 |
+
+解释：prompt tokens 在固定输入下保持稳定，因为情绪判断模板、上下文和转写文本长度固定；completion tokens 波动较大，是因为模型生成 JSON 时字段值和理由长度并不完全相同；延迟波动来自模型服务端排队、网络往返和输出长度差异。实际部署中，语音文本更长、上下文轮数更多，prompt tokens 会随之上升；如果缩短 `emotion_prompt_template` 或降低 `emotion_context_turns`，额外成本会下降。
+
+</details>
+
 ### 情绪判断 JSON
 
 情绪判断 LLM 被要求只输出 JSON，例如：
