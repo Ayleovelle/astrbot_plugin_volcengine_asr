@@ -30,6 +30,7 @@ class _FakeEvent:
         self.replies = []
         self.calls = []
         self.is_at_or_wake_command = True
+        self.call_llm = False
         self.unified_msg_origin = "umo"
         self.message_obj = type("MessageObj", (), {})()
         self.message_obj.group_id = group_id
@@ -59,6 +60,10 @@ class _FakeEvent:
         result = {"type": "plain_result", "text": text}
         self.replies.append(result)
         return result
+
+    def should_call_llm(self, call_llm):
+        self.calls.append(("should_call_llm", call_llm))
+        self.call_llm = call_llm
 
 
 class _FakeProviderRequest:
@@ -147,9 +152,11 @@ def test_on_message_success_rebuilds_event_and_provider_request():
 
     outputs = asyncio.run(_collect_asyncgen(plugin.on_message(event)))
 
-    assert outputs == []
+    assert len(outputs) == 1
+    assert outputs[0].prompt == "hello[voice prompt]"
     assert event.stopped == 0
-    assert event.calls == []
+    assert event.calls == [("should_call_llm", True)]
+    assert event.call_llm is True
     assert event.message_str == "hello"
     assert event.message_obj.message_str == "hello"
     assert event.message[0].text == "hello"
@@ -191,7 +198,8 @@ def test_on_message_success_cleans_non_iterable_message_chain_object():
 
     outputs = asyncio.run(_collect_asyncgen(plugin.on_message(event)))
 
-    assert outputs == []
+    assert len(outputs) == 1
+    assert outputs[0].prompt == "hello[voice prompt]"
     assert VolcengineAsrPlugin._find_records(event) == []
     assert len(original_chain.chain) == 1
     assert original_chain.chain[0].text == "hello"
@@ -226,7 +234,7 @@ def test_on_message_cleans_record_before_emotion_llm_call():
 
     outputs = asyncio.run(_collect_asyncgen(plugin.on_message(event)))
 
-    assert outputs == []
+    assert len(outputs) == 1
     assert event.stopped == 0
     assert VolcengineAsrPlugin._find_records(event) == []
     assert event.get_extra(ASR_EXTRA_EMOTION_RESULT)["label"] == "anxious"
@@ -277,7 +285,8 @@ def test_on_message_unclear_voice_injects_unclear_plan():
 
     outputs = asyncio.run(_collect_asyncgen(plugin.on_message(event)))
 
-    assert outputs == []
+    assert len(outputs) == 1
+    assert outputs[0].prompt == plugin.unclear_voice_prompt
     assert event.stopped == 0
     assert event.message_str == DEFAULT_UNCLEAR_MEMORY_TEXT
     assert event.message[0].text == DEFAULT_UNCLEAR_MEMORY_TEXT
@@ -288,6 +297,7 @@ def test_on_message_unclear_voice_injects_unclear_plan():
     assert event.get_extra(ASR_EXTRA_UNCLEAR) is True
     assert event.get_extra(ASR_EXTRA_INJECTED) is True
     assert event.get_extra("provider_request").prompt == plugin.unclear_voice_prompt
+    assert event.calls == [("should_call_llm", True)]
 
 
 def test_on_message_reply_mode_stops_after_success_when_configured():

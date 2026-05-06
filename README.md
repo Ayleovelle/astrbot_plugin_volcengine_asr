@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.1.3-brightgreen.svg" alt="Version 2.1.3">
+  <img src="https://img.shields.io/badge/Version-2.1.4-brightgreen.svg" alt="Version 2.1.4">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License MIT">
@@ -125,6 +125,18 @@ VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest
 - 情绪判断前会先清理当前语音 `Record`，再把转写文本和可用上下文交给情绪判断 LLM。
 - 识别失败、配置错误、未听清直接提示、`reply_transcription=true` 直接回复转写等不需要默认 LLM 继续处理原语音的路径，会先 `stop_event()`，再发送回复。
 - 这样可以避免后续 agent 或媒体转换逻辑继续读取裸 `.amr` 文件名，减少 `not a valid file: xxx.amr`。
+
+## 2.1.4 AstrBot 更新器与官方 agent 兼容修复
+
+`2.1.4` 修复两个 AstrBot 侧交接问题。
+
+第一，修复插件页更新时报 `Plugin astrbot_plugin_volcengine_asr does not specify a repository URL.` 的问题。原因是 `metadata.yaml` 中的 `repo` 字段此前为空，AstrBot 更新器无法知道应该从哪个 GitHub 仓库检查新版。
+
+第二，修复官方 agent 仍按旧 `Record(file="xxx.amr")` 消息链重新构造请求的问题。插件成功识别语音后，会直接向 AstrBot `ProcessStage` yield 一个干净 `ProviderRequest`，并调用 `event.should_call_llm(True)` 阻止默认 LLM 流程再次重入，避免 `agent_sub_stages` 再触发 `Record.convert_to_file_path()`。
+
+- 根目录和发布包目录的 `metadata.yaml` 都已写入 `https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr`。
+- 已安装旧版的用户建议先手动上传 `2.1.4` Release zip；安装后，后续 AstrBot 插件页更新才能读取到仓库地址。
+- `preprocess_stage` 中官方语音预处理的 warning 发生在插件 handler 之前；若关闭插件仍看到这条 warning，需要关闭 AstrBot 官方 STT/语音预处理或让 NapCat 提供真实可读文件。但插件开启后不应再继续进入 `agent_sub_stages` 的旧 Record 媒体扫描。
 
 ## 2.1.3 发布通道修复
 
@@ -990,7 +1002,7 @@ python3 scripts/build_release_zip.py
 
 ## 版本说明
 
-当前版本：`2.1.3`
+当前版本：`2.1.4`
 
 本版本重点：
 

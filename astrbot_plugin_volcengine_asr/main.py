@@ -826,16 +826,40 @@ def _set_event_extras(event: AstrMessageEvent, extras: dict[str, Any]) -> None:
 
 
 def _set_clean_provider_request(event: AstrMessageEvent, prompt: str) -> None:
+    req = _build_clean_provider_request(prompt)
+    if req is not None:
+        event.set_extra("provider_request", req)
+
+
+def _build_clean_provider_request(prompt: str) -> Any | None:
     try:
         req = CoreProviderRequest()
     except Exception as exc:
         logger.warning(f"创建干净 ProviderRequest 失败，将回退到事件文本注入：{exc}")
-        return
+        return None
     req.prompt = prompt
     req.image_urls = []
     req.audio_urls = []
     req.extra_user_content_parts = []
-    event.set_extra("provider_request", req)
+    return req
+
+
+def _looks_like_provider_request(value: Any) -> bool:
+    return value is not None and hasattr(value, "prompt")
+
+
+def _disable_default_llm_reentry(event: AstrMessageEvent) -> None:
+    should_call_llm = getattr(event, "should_call_llm", None)
+    if callable(should_call_llm):
+        try:
+            should_call_llm(True)
+            return
+        except Exception as exc:
+            logger.warning(f"禁用默认 LLM 重入失败，将回退到直接设置 call_llm：{exc}")
+    try:
+        setattr(event, "call_llm", True)
+    except Exception as exc:
+        logger.warning(f"设置 call_llm 标记失败：{exc}")
 
 
 def _stop_voice_event_with_plain_text(
@@ -1587,10 +1611,14 @@ class VolcengineAsrPlugin(Star):
                 llm_text = _append_emotion_guidance(llm_text, emotion_judgement)
                 event.set_extra(ASR_EXTRA_LLM_TEXT, llm_text)
             _set_clean_provider_request(event, llm_text)
+            provider_request = event.get_extra("provider_request", None)
+            _disable_default_llm_reentry(event)
             logger.info(
                 "已将语音识别结果注入为干净用户输入，"
                 f"memory_text={transcription_text}, llm_text={llm_text}"
             )
+            if _looks_like_provider_request(provider_request):
+                yield provider_request
             return
 
         if (
@@ -1610,10 +1638,14 @@ class VolcengineAsrPlugin(Star):
                 ),
             )
             _set_clean_provider_request(event, self.unclear_voice_prompt)
+            provider_request = event.get_extra("provider_request", None)
+            _disable_default_llm_reentry(event)
             logger.info(
                 "语音未识别到内容，已注入干净未听清事件文本，"
                 f"llm_text={self.unclear_voice_prompt}"
             )
+            if _looks_like_provider_request(provider_request):
+                yield provider_request
             return
 
         reply = self._build_reply(results, errors)

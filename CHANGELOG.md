@@ -1,5 +1,15 @@
 # 更新说明
 
+## v2.1.4 - 修复 AstrBot 更新器仓库地址与官方 agent 重入
+
+### 主要变更
+
+- 修复 AstrBot 插件页更新时报 `Plugin astrbot_plugin_volcengine_asr does not specify a repository URL.` 的问题。
+- 根目录 `metadata.yaml` 和发布包目录 `astrbot_plugin_volcengine_asr/metadata.yaml` 均补充 `repo: "https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr"`。
+- 成功识别和未听清注入路径会直接向 AstrBot `ProcessStage` yield 干净 `ProviderRequest`，避免官方 agent 重新按旧 `Record(file="xxx.amr")` 消息链构造请求。
+- 写入 `provider_request` 后同步调用 `event.should_call_llm(True)`，避免默认 LLM 流程在插件提供请求之后再次重入。
+- 继续保留 ASR、ffmpeg、情绪判断和消息链清理工作流；本次只收紧与 AstrBot 官方 agent 的交接方式。
+
 ## v2.1.3 - 修复 GitHub Release 发布通道
 
 ### 主要变更
