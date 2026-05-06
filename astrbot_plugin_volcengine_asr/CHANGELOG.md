@@ -1,5 +1,17 @@
 # 更新说明
 
+## v2.0.4 - 修复 ffmpeg 启动探测与打包校验
+
+### 主要变更
+
+- 修复内置 `ffmpeg` 文件存在但无法正常启动时，插件仍优先选中它并导致 AMR / SILK / M4A 转码失败的问题。
+- ffmpeg 查找流程改为逐个执行 `ffmpeg -version` 启动探测；内置 ffmpeg 不可用时，会自动尝试 `imageio-ffmpeg` 和系统 PATH 中的 `ffmpeg`。
+- `ffmpeg_path` 配置为绝对路径时，会只探测该路径；不可启动时保留诊断，不会让插件加载阶段直接崩溃。
+- 转码启动阶段会捕获 `PermissionError`、`Exec format error`、`noexec` 等底层 `OSError`，并转换成用户可读错误，提示安装系统 ffmpeg 或配置 `ffmpeg_path`。
+- `/volc_asr_status` 增加 `ffmpeg状态`，Web UI 预留状态接口增加 `ffmpeg_status` 与 `ffmpeg_error`。
+- Release zip 构建脚本强制校验 `bin/linux-x86_64/ffmpeg` 源文件存在，并回读 zip 确认 entry 权限位为 `0o100755`。
+- 增加回归测试，覆盖 `ffmpeg -version` 输出解析、启动探测成功/失败、转码启动异常转为 `UserVisibleError`、探测失败时不继续 spawn ffmpeg。
+
 ## v2.0.3 - 加固 agent 音频残留清理
 
 ### 主要变更

@@ -6,6 +6,7 @@ import json
 import math
 import os
 import platform
+import subprocess
 import sys
 import uuid
 from dataclasses import dataclass
@@ -38,6 +39,7 @@ VOLC_SUCCESS_CODE = "20000000"
 VOLC_SILENT_AUDIO_CODE = "20000003"
 SUPPORTED_AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".opus"}
 TRANSCODE_HINT_EXTS = {".amr", ".silk", ".slk", ".m4a", ".aac", ".flac", ".webm"}
+FFMPEG_PROBE_TIMEOUT_SECONDS = 5
 DEFAULT_VOICE_PROMPT_TEMPLATE = (
     "<text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，"
     "并且尽量使用语音回复，严禁讨论本插件的实际功能“转文字”的事实，回复时不要考虑括号内内容]"
@@ -875,27 +877,85 @@ def _append_emotion_guidance(llm_text: str, judgement: EmotionJudgement | None) 
     return f"{llm_text.strip()}{_format_emotion_guidance_for_llm(judgement)}".strip()
 
 
-def _resolve_ffmpeg_path(configured_path: str, prefer_bundled: bool) -> tuple[str, str]:
+def _parse_ffmpeg_version_output(output: str) -> str | None:
+    first_line = output.strip().splitlines()[0] if output.strip() else ""
+    if not first_line.lower().startswith("ffmpeg version "):
+        return None
+    parts = first_line.split()
+    return parts[2] if len(parts) >= 3 else None
+
+
+def _probe_ffmpeg_startup(ffmpeg_path: str) -> tuple[bool, str]:
+    try:
+        completed = subprocess.run(
+            [ffmpeg_path, "-version"],
+            capture_output=True,
+            text=True,
+            timeout=FFMPEG_PROBE_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except FileNotFoundError:
+        return False, "文件不存在"
+    except PermissionError as exc:
+        return False, f"没有执行权限：{exc}"
+    except subprocess.TimeoutExpired:
+        return False, "启动探测超时"
+    except OSError as exc:
+        return False, f"无法启动：{exc}"
+
+    output = "\n".join(part for part in (completed.stdout, completed.stderr) if part)
+    if completed.returncode != 0:
+        error_text = output.strip() or f"退出码 {completed.returncode}"
+        if len(error_text) > 160:
+            error_text = error_text[:160] + "..."
+        return False, error_text
+
+    version = _parse_ffmpeg_version_output(output)
+    if not version:
+        return False, "无法识别 ffmpeg -version 输出"
+    return True, version
+
+
+def _select_probeable_ffmpeg(candidates: list[tuple[str, str]]) -> tuple[str, str, str]:
+    failures: list[str] = []
+    for path, source in candidates:
+        ok, detail = _probe_ffmpeg_startup(path)
+        if ok:
+            return path, f"{source} ({detail})", ""
+        failures.append(f"{source}={path}：{detail}")
+    error = (
+        "未找到可启动的 ffmpeg，已尝试 "
+        + "；".join(failures)
+        + "。请安装系统 ffmpeg，或在配置中填写可执行的 ffmpeg_path。"
+    )
+    fallback_path = candidates[0][0] if candidates else "ffmpeg"
+    return fallback_path, "不可用", error
+
+
+def _resolve_ffmpeg_path(configured_path: str, prefer_bundled: bool) -> tuple[str, str, str]:
     configured_path = (configured_path or "auto").strip()
+    candidates: list[tuple[str, str]] = []
     if prefer_bundled and configured_path.lower() in {"", "auto", "ffmpeg"}:
         bundled = _get_plugin_bundled_ffmpeg()
         if bundled:
-            return bundled
+            candidates.append(bundled)
 
         try:
             import imageio_ffmpeg
 
             bundled_path = imageio_ffmpeg.get_ffmpeg_exe()
             if bundled_path:
-                return bundled_path, "imageio-ffmpeg"
+                candidates.append((bundled_path, "imageio-ffmpeg"))
         except Exception as exc:
             logger.warning(f"读取 imageio-ffmpeg 内置 ffmpeg 失败，将回退到系统 PATH：{exc}")
 
     if configured_path.lower() in {"", "auto"}:
-        return "ffmpeg", "PATH"
+        candidates.append(("ffmpeg", "PATH"))
+        return _select_probeable_ffmpeg(candidates)
     if configured_path == "ffmpeg":
-        return configured_path, "PATH"
-    return configured_path, "配置路径"
+        candidates.append((configured_path, "PATH"))
+        return _select_probeable_ffmpeg(candidates)
+    return _select_probeable_ffmpeg([(configured_path, "配置路径")])
 
 
 def _get_plugin_bundled_ffmpeg() -> tuple[str, str] | None:
@@ -1087,10 +1147,15 @@ class VolcengineAsrPlugin(Star):
         self.enable_transcode = _config_bool(self.config, "enable_transcode", True)
         self.prefer_bundled_ffmpeg = _config_bool(self.config, "prefer_bundled_ffmpeg", True)
         configured_ffmpeg_path = _config_str(self.config, "ffmpeg_path", "auto") or "auto"
-        self.ffmpeg_path, self.ffmpeg_source = _resolve_ffmpeg_path(
-            configured_ffmpeg_path,
-            self.prefer_bundled_ffmpeg,
-        )
+        if self.enable_transcode:
+            self.ffmpeg_path, self.ffmpeg_source, self.ffmpeg_error = _resolve_ffmpeg_path(
+                configured_ffmpeg_path,
+                self.prefer_bundled_ffmpeg,
+            )
+        else:
+            self.ffmpeg_path = "ffmpeg" if configured_ffmpeg_path.lower() in {"", "auto"} else configured_ffmpeg_path
+            self.ffmpeg_source = "未探测（自动转码关闭）"
+            self.ffmpeg_error = ""
         self.transcode_sample_rate = max(8000, _config_int(self.config, "transcode_sample_rate", 16000))
         self.transcode_channels = max(1, _config_int(self.config, "transcode_channels", 1))
         self.transcode_output_format = _config_str(self.config, "transcode_output_format", "wav").lower()
@@ -1121,6 +1186,7 @@ class VolcengineAsrPlugin(Star):
             f"\n自动转码：{'启用' if state['enable_transcode'] else '关闭'}"
             f"\n转码输出：{state['transcode_output_format']}"
             f"\nffmpeg来源：{state['ffmpeg_source']}"
+            f"\nffmpeg状态：{state['ffmpeg_status']}"
             f"\n私聊：{'启用' if state['enable_private'] else '关闭'}"
             f"\n群聊：{'启用' if state['enable_group'] else '关闭'}"
             f"\n最大音频：{state['max_audio_mb']} MB"
@@ -1162,6 +1228,14 @@ class VolcengineAsrPlugin(Star):
             "prefer_bundled_ffmpeg": self.prefer_bundled_ffmpeg,
             "ffmpeg_path": self.ffmpeg_path,
             "ffmpeg_source": self.ffmpeg_source,
+            "ffmpeg_status": (
+                "未探测（自动转码关闭）"
+                if not self.enable_transcode
+                else "不可用"
+                if self.ffmpeg_error
+                else "可用"
+            ),
+            "ffmpeg_error": self.ffmpeg_error,
             "max_audio_mb": _max_mb_text(self.max_audio_bytes),
             "enable_itn": self.client.enable_itn,
             "enable_punc": self.client.enable_punc,
@@ -1526,6 +1600,9 @@ class VolcengineAsrPlugin(Star):
         return await self._transcode_audio(data, suffix)
 
     async def _transcode_audio(self, data: bytes, suffix: str) -> bytes:
+        if self.ffmpeg_error:
+            raise UserVisibleError(self.ffmpeg_error)
+
         output_format = self.transcode_output_format
         command = [
             self.ffmpeg_path,
@@ -1554,10 +1631,10 @@ class VolcengineAsrPlugin(Star):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-        except FileNotFoundError as exc:
+        except OSError as exc:
             raise UserVisibleError(
-                f"需要 ffmpeg 才能转码 {suffix or '该'} 音频，请确认 imageio-ffmpeg 依赖安装成功，"
-                "或配置 ffmpeg_path。"
+                f"ffmpeg 启动失败，无法转码 {suffix or '该'} 音频：{exc}。"
+                "请安装系统 ffmpeg，或在配置中填写可执行的 ffmpeg_path。"
             ) from exc
 
         try:

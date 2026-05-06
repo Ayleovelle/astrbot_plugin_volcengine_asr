@@ -1,3 +1,8 @@
+import asyncio
+import subprocess
+from contextlib import contextmanager
+
+import astrbot_plugin_volcengine_asr.main as plugin_main
 from astrbot_plugin_volcengine_asr.main import (
     ASR_EXTRA_INJECTED,
     ASR_EXTRA_LLM_TEXT,
@@ -6,6 +11,7 @@ from astrbot_plugin_volcengine_asr.main import (
     ASR_EXTRA_UNCLEAR,
     AsrResult,
     EmotionJudgement,
+    UserVisibleError,
     VolcengineAsrPlugin,
     _append_emotion_guidance,
     _build_emotion_judgement,
@@ -16,6 +22,9 @@ from astrbot_plugin_volcengine_asr.main import (
     _estimate_base64_size,
     _extract_record_sources,
     _normalize_emotion_weights,
+    _parse_ffmpeg_version_output,
+    _probe_ffmpeg_startup,
+    _resolve_ffmpeg_path,
     _render_named_placeholders,
     _render_prompt_template,
     _replace_first_text,
@@ -24,6 +33,16 @@ from astrbot_plugin_volcengine_asr.main import (
 )
 import astrbot.api.message_components as Comp
 from scripts.update_fuck_u_code_score import build_svg, extract_score, find_score, normalize_score
+
+
+@contextmanager
+def _patched_attr(obj, name, value):
+    old = getattr(obj, name)
+    setattr(obj, name, value)
+    try:
+        yield
+    finally:
+        setattr(obj, name, old)
 
 
 class _FakeEvent:
@@ -98,6 +117,13 @@ class _TextPart:
         self.text = text
 
 
+class _CompletedProcess:
+    def __init__(self, returncode=0, stdout="", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
 def test_render_prompt_template_supports_angle_placeholder_with_braces_text():
     rendered = _render_prompt_template(
         "<text>[请自然回复]",
@@ -138,6 +164,79 @@ def test_detect_audio_suffix_uses_magic_headers():
     assert _detect_audio_suffix(b"ID3xxxx", "voice.bin") == ".mp3"
     assert _detect_audio_suffix(b"#!AMR\n", "voice.bin") == ".amr"
     assert _detect_audio_suffix(b"#!SILK_V3", "voice.bin") == ".silk"
+
+
+def test_parse_ffmpeg_version_output_reads_first_line_version():
+    assert _parse_ffmpeg_version_output("ffmpeg version 6.1.1 Copyright ...") == "6.1.1"
+    assert _parse_ffmpeg_version_output("not ffmpeg") is None
+
+
+def test_probe_ffmpeg_startup_success_and_permission_failure():
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return _CompletedProcess(
+            returncode=0,
+            stdout="ffmpeg version 6.1.1 Copyright ...",
+        )
+
+    with _patched_attr(plugin_main.subprocess, "run", fake_run):
+        ok, detail = _probe_ffmpeg_startup("/tmp/ffmpeg")
+
+    assert ok is True
+    assert detail == "6.1.1"
+    assert calls[0][0] == ["/tmp/ffmpeg", "-version"]
+    assert calls[0][1]["timeout"] == plugin_main.FFMPEG_PROBE_TIMEOUT_SECONDS
+
+    def fake_permission_error(command, **kwargs):
+        raise PermissionError("denied")
+
+    with _patched_attr(plugin_main.subprocess, "run", fake_permission_error):
+        ok, detail = _probe_ffmpeg_startup("/tmp/ffmpeg")
+
+    assert ok is False
+    assert "执行权限" in detail
+
+
+def test_probe_ffmpeg_startup_rejects_bad_version_output():
+    def fake_run(command, **kwargs):
+        return _CompletedProcess(returncode=0, stdout="hello")
+
+    with _patched_attr(plugin_main.subprocess, "run", fake_run):
+        ok, detail = _probe_ffmpeg_startup("/tmp/ffmpeg")
+
+    assert ok is False
+    assert "无法识别" in detail
+
+
+def test_resolve_ffmpeg_path_falls_back_after_failed_candidates():
+    calls = []
+
+    def fake_probe(path):
+        calls.append(path)
+        return (path == "ffmpeg", "7.0" if path == "ffmpeg" else "没有执行权限")
+
+    with _patched_attr(plugin_main, "_probe_ffmpeg_startup", fake_probe):
+        path, source, error = _resolve_ffmpeg_path("auto", prefer_bundled=False)
+
+    assert path == "ffmpeg"
+    assert source == "PATH (7.0)"
+    assert error == ""
+    assert calls == ["ffmpeg"]
+
+
+def test_resolve_ffmpeg_path_keeps_diagnostic_when_all_candidates_fail():
+    def fake_probe(path):
+        return False, "没有执行权限"
+
+    with _patched_attr(plugin_main, "_probe_ffmpeg_startup", fake_probe):
+        path, source, error = _resolve_ffmpeg_path("/bad/ffmpeg", prefer_bundled=True)
+
+    assert path == "/bad/ffmpeg"
+    assert source == "不可用"
+    assert "未找到可启动的 ffmpeg" in error
+    assert "/bad/ffmpeg" in error
 
 
 def test_estimate_base64_size_handles_padding():
@@ -521,6 +620,56 @@ def test_webui_update_validates_type_options_and_ranges():
     assert result["skipped"]["unknown_key"] == "未知配置项"
     assert result["applied"] == {}
     assert plugin.submit_mode == "base64"
+
+
+def test_runtime_config_skips_ffmpeg_probe_when_transcode_disabled():
+    def fake_probe(path):
+        raise AssertionError("ffmpeg should not be probed when transcode is disabled")
+
+    with _patched_attr(plugin_main, "_probe_ffmpeg_startup", fake_probe):
+        plugin = VolcengineAsrPlugin(
+            None,
+            {"api_key": "token", "enable_transcode": False, "ffmpeg_path": "auto"},
+        )
+
+    state = plugin.get_webui_state()
+    assert state["enable_transcode"] is False
+    assert state["ffmpeg_source"] == "未探测（自动转码关闭）"
+    assert state["ffmpeg_status"] == "未探测（自动转码关闭）"
+
+
+def test_transcode_audio_wraps_ffmpeg_startup_os_errors():
+    plugin = VolcengineAsrPlugin(None, {"api_key": "token", "ffmpeg_path": "ffmpeg", "prefer_bundled_ffmpeg": False})
+    plugin.ffmpeg_error = ""
+    plugin.ffmpeg_path = "/tmp/ffmpeg"
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        raise PermissionError("denied")
+
+    with _patched_attr(plugin_main.asyncio, "create_subprocess_exec", fake_create_subprocess_exec):
+        try:
+            asyncio.run(plugin._transcode_audio(b"abc", ".amr"))
+        except UserVisibleError as exc:
+            assert "ffmpeg 启动失败" in str(exc)
+            assert "ffmpeg_path" in str(exc)
+        else:
+            raise AssertionError("expected UserVisibleError")
+
+
+def test_transcode_audio_uses_cached_ffmpeg_probe_error_before_spawn():
+    plugin = VolcengineAsrPlugin(None, {"api_key": "token", "ffmpeg_path": "ffmpeg", "prefer_bundled_ffmpeg": False})
+    plugin.ffmpeg_error = "未找到可启动的 ffmpeg"
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        raise AssertionError("ffmpeg should not spawn when probe failed")
+
+    with _patched_attr(plugin_main.asyncio, "create_subprocess_exec", fake_create_subprocess_exec):
+        try:
+            asyncio.run(plugin._transcode_audio(b"abc", ".amr"))
+        except UserVisibleError as exc:
+            assert "未找到可启动的 ffmpeg" in str(exc)
+        else:
+            raise AssertionError("expected UserVisibleError")
 
 
 def test_extract_fuck_u_code_score_from_report_text():

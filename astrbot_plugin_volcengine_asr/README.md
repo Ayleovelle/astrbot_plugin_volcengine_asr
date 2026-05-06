@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.0.3-brightgreen.svg" alt="Version 2.0.3">
+  <img src="https://img.shields.io/badge/Version-2.0.4-brightgreen.svg" alt="Version 2.0.4">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License MIT">
@@ -544,9 +544,11 @@ max_respect_weight = 0.60
 `ffmpeg` 查找顺序：
 
 1. 当 `prefer_bundled_ffmpeg=true` 且 `ffmpeg_path=auto` 或 `ffmpeg` 时，优先尝试 Release zip 内置 `bin/linux-x86_64/ffmpeg`。
-2. 如果内置文件不可用，尝试 `imageio-ffmpeg` 提供的可执行文件。
-3. 最后尝试系统 PATH 中的 `ffmpeg`。
-4. 如果你在 `ffmpeg_path` 中填写绝对路径，则优先使用该路径。
+2. 如果内置文件不能通过 `ffmpeg -version` 启动探测，会自动尝试 `imageio-ffmpeg` 提供的可执行文件。
+3. 如果 `imageio-ffmpeg` 也不可启动，最后尝试系统 PATH 中的 `ffmpeg`。
+4. 如果你在 `ffmpeg_path` 中填写绝对路径，则只探测并使用该路径。
+
+`/volc_asr_status` 会显示 `ffmpeg来源` 和 `ffmpeg状态`。如果状态为不可用，插件不会在加载阶段崩溃，但遇到 AMR / SILK / M4A 等需要转码的语音时会给出明确错误，并提示你安装系统 `ffmpeg` 或配置 `ffmpeg_path`。
 
 关于 `submit_mode`：
 
@@ -721,6 +723,7 @@ requirements.txt
 3. `prefer_bundled_ffmpeg` 是否为 `true`。
 4. `ffmpeg_path` 是否为 `auto` 或正确的绝对路径。
 5. 如果不是 x86_64 架构，是否已经安装系统 `ffmpeg`。
+6. 运行 `/volc_asr_status`，查看 `ffmpeg状态` 是否为可用；如果不可用，日志会说明内置、`imageio-ffmpeg`、PATH 分别为什么启动失败。
 
 非 Linux x86_64 / amd64 环境建议：
 
@@ -925,14 +928,15 @@ python3 scripts/build_release_zip.py
 
 ## 版本说明
 
-当前版本：`2.0.3`
+当前版本：`2.0.4`
 
 本版本重点：
 
-- 继续修复 AstrBot v4.24.2 agent 阶段可能继续读取旧 `.amr Record` 并报 `not a valid file` 的问题。
-- 识别成功或未听清注入时，原地改写旧消息链 list，并同步清理 `message`、`message_chain`、`raw_message` 等常见消息链入口。
-- LLM 请求阶段清理 `audio_urls`、`contexts`、`extra_user_content_parts`、`messages`、`content`、`files` 等音频残留字段。
-- 兼容裸 OneBot record dict 与嵌套 dict 形态的语音段读取，降低不同适配器消息结构差异带来的识别失败风险。
+- 修复 ffmpeg 找到但无法启动时没有自动降级、错误不清晰的问题。
+- ffmpeg 查找会逐个执行 `ffmpeg -version` 启动探测，内置不可用时自动尝试 `imageio-ffmpeg` 和系统 PATH。
+- 转码启动阶段会把 `PermissionError`、`Exec format error`、`noexec` 等底层 `OSError` 转成用户可读错误。
+- `/volc_asr_status` 增加 `ffmpeg状态`，方便直接判断转码链路是否可用。
+- Release zip 构建脚本强制校验内置 `bin/linux-x86_64/ffmpeg` 存在，并确认 zip 权限位为 `0o100755`。
 - 继承 2.0.1 的代码与工作流程优化。
 - 为未来 Web UI 预留可读、可写、可校验的配置接口。
 - `fuck-u-code` 分数由 GitHub Actions bot 自动分析和更新 SVG。
