@@ -1,11 +1,16 @@
-<!-- markdownlint-disable MD024 MD033 MD041 -->
+<!-- markdownlint-disable MD024 MD033 MD041 MD051 -->
 
 <p align="center">
-  <img src="./assets/VoiceMountain.svg" alt="火山引擎语音转文字 AstrBot 插件" width="920">
+  <img src="./assets/komari-mascot.png" alt="项目吉祥物小鞠" width="220">
 </p>
 
 <p align="center">
+  <strong>项目吉祥物：小鞠</strong><br>
+  <sub>少、少啰嗦，她只是来监督 README 不要再写成 bug 日志。</sub>
+</p>
 
+<p align="center">
+  <img src="./assets/VoiceMountain.svg" alt="火山引擎语音转文字 AstrBot 插件" width="920">
 </p>
 
 <p align="center">
@@ -15,11 +20,12 @@
 <h1 align="center">AstrBot 火山引擎语音转文字插件</h1>
 
 <p align="center">
-  <strong>让 QQ 语音像文字消息一样进入 AstrBot、LLM、TTS 和长期记忆流程。</strong>
+  <strong>把 QQ 语音变成 AstrBot 可以理解、记忆、推理和继续回复的用户输入。</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.1.12-brightgreen.svg" alt="Version 2.1.12">
+  <img src="https://img.shields.io/badge/Current-2.1.12-brightgreen.svg" alt="Current 2.1.12">
+  <img src="https://img.shields.io/badge/Core-2.0.0%20Emotion%20Layer-ff69b4.svg" alt="Core 2.0.0 Emotion Layer">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License MIT">
@@ -36,237 +42,152 @@
 
 ## 快速导航
 
-| 左列 | 右列 |
+| 主题 | 内容 |
 | :--- | :--- |
-| 1. [插件定位](#插件定位) | 9. [情绪判断模块](#情绪判断模块) |
-| 2. [适合谁使用](#适合谁使用) | 10. [完整配置说明](#完整配置说明) |
-| 3. [核心特性](#核心特性) | 11. [默认提示词与模板写法](#默认提示词与模板写法) |
-| 4. [重建后的语音工作流](#重建后的语音工作流) | 12. [LivingMemory 兼容机制](#livingmemory-兼容机制) |
-| 5. [安装方式](#安装方式) | 13. [命令与状态检查](#命令与状态检查) |
-| 6. [火山引擎准备](#火山引擎准备) | 14. [常见问题与排障](#常见问题与排障) |
-| 7. [推荐配置](#推荐配置) | 15. [目录结构与发布包说明](#目录结构与发布包说明) |
-| 8. [情绪判断快速配置](#情绪判断快速配置) | 16. [第三方组件与许可证](#第三方组件与许可证) |
+| [项目定位](#项目定位) | 为什么它不是普通的“语音转文字回复器”。 |
+| [2.0.0 核心能力](#200-核心能力情绪判断-llm) | 情绪判断 LLM、语气参考层、`respect_weight` 公式。 |
+| [详细论证](#情绪权重计算与论证) | 像论文一样展开公式、边界、假设和失效条件。 |
+| [快速开始](#快速开始) | Release zip 安装、仓库安装、最小配置。 |
+| [语音工作流](#语音工作流) | `VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest`。 |
+| [兼容设计](#兼容设计) | AstrBot / OneBot / NapCat / Docker / ffmpeg 的边界。 |
+| [配置指南](#配置指南) | 推荐配置、完整配置项、提示词模板。 |
+| [排障](#常见问题与排障) | `not a valid file`、上传包结构、ffmpeg、ProviderRequest。 |
+| [版本叙事](#版本叙事) | 2.0.0 是能力主线，2.1.x 主要是兼容修补史。 |
+| [项目吉祥物](#项目吉祥物小鞠) | 小鞠展示图与完整 Codex 宠物图集。 |
 
 ---
 
-## 插件定位
+## 项目吉祥物：小鞠
 
-`astrbot_plugin_volcengine_asr` 是一个面向 AstrBot 的 QQ 语音识别插件。它会监听消息链中的 `Record` 语音段，读取或下载音频，必要时调用 `ffmpeg` 转码，然后通过火山引擎豆包语音「大模型录音文件极速版识别 API」把语音转成文本。
+<p align="center">
+  <img src="./assets/komari-mascot.png" alt="项目吉祥物小鞠" width="180">
+</p>
 
-与“识别后直接回复一条语音转文字结果”的简单插件不同，本插件的默认目标是：
+小鞠是这个项目的 Codex 宠物吉祥物。她的工作不参与 ASR、转码、ProviderRequest 清理或情绪权重计算，只负责在文档里安静地提醒维护者：核心能力要讲清楚，后续 bugfix 要收进修补史里。
 
-> 把语音转写结果注入为用户输入，让 AstrBot 后续的 LLM、TTS、长期记忆、上下文插件继续正常工作。
+<details>
+<summary>展开欣赏：完整小鞠 Codex 宠物图集</summary>
 
-也就是说，用户发一条 QQ 语音后，Bot 可以像收到一条文字消息一样理解它、记住它，并自然回复。对于希望实现“用户语音输入，Bot 理解后尽量语音回复”的使用场景，这个插件更像是语音入口层，而不只是一个转写工具。
+<p align="center">
+  <img src="./assets/komari-spritesheet.webp" alt="小鞠 Codex 宠物完整动作图集" width="760">
+</p>
 
-> [!IMPORTANT]
-> 推荐优先使用 Releases 中的 `astrbot_plugin_volcengine_asr.zip` 安装。
->
-> GitHub 页面绿色 Code 按钮下载的源码 zip 不等于本插件发布包：源码 zip 通常不包含 Release 包内置的 `bin/linux-x86_64/ffmpeg`，也可能因为目录层级不同导致 AstrBot 找不到 `metadata.yaml`。
+宠物源文件已整理进仓库 `assets/` 目录。README 使用相对路径资源，保证 GitHub、Release 包和 AstrBot 插件目录中都能正常显示。
 
-## 适合谁使用
+</details>
 
-本插件比较适合以下场景：
+---
 
-- 你使用 AstrBot 接入 QQ / OneBot v11 / NapCat。
-- 你希望用户可以直接发 QQ 语音，而不是必须打字。
-- 你希望语音内容进入 LLM 对话，而不是 Bot 只机械回复“语音转文字：xxx”。
-- 你正在使用长期记忆插件，例如 `astrbot_plugin_livingmemory`，并且不希望记忆里混入语音提示词模板。
-- 你部署在 Docker、VPS 或 Linux x86_64 / amd64 环境，希望开箱就能处理 AMR、SILK、M4A 等常见 QQ 语音格式。
-- 你希望在调试时可以切换到“直接回复转写文本”的旧行为。
+## 项目定位
 
-如果你只是想偶尔手动转写一条语音，也可以开启 `reply_transcription=true`，让插件直接在聊天中回复识别结果。但本插件默认更推荐“注入为用户输入”的工作方式。
+`astrbot_plugin_volcengine_asr` 是一个面向 AstrBot 的 QQ 语音输入插件。它监听 OneBot v11 / NapCat 传入的 `Record` 语音段，读取、下载或转码音频，然后调用火山引擎豆包语音识别接口，把语音转写成文本。
 
-## 核心特性
+但它的核心目标不是“收到语音以后机械回复一条转写结果”。它真正要做的是：
 
-| 能力 | 说明 |
+> 让 QQ 语音像普通文字消息一样进入 AstrBot 的 LLM、TTS、上下文和长期记忆流程。
+
+这意味着插件必须同时处理四件事：
+
+| 问题 | 为什么重要 |
 | :--- | :--- |
-| 自动识别 QQ 语音 | 支持私聊和群聊，识别 OneBot v11 / NapCat 返回的 `Record` 语音消息。 |
-| 火山引擎 ASR | 使用豆包语音大模型录音文件极速版识别接口，默认资源 ID 为 `volc.bigasr.auc_turbo`。 |
-| Base64 上传 | 默认由 AstrBot 所在机器读取或下载音频，再提交给火山接口，适合大多数 QQ 语音 URL 无法公网访问的情况。 |
-| 自动转码 | 检测到 AMR、SILK、M4A、AAC、FLAC、WEBM 等格式时，可调用 `ffmpeg` 转为 WAV / MP3 / OGG。 |
-| Release 包内置 ffmpeg | Release zip 内置 Linux x86_64 / amd64 版 `ffmpeg`，适合 Docker / VPS。 |
-| LLM 友好 | 默认把转写文本注入为用户输入，让模型自然理解语音内容。 |
-| 情绪判断 LLM | 2.0.0 新增，可选地在主 LLM 回复前分析用户语音情绪，并以公式化权重影响主 LLM 语气。 |
-| LivingMemory 友好 | 消息阶段写入干净转写文本，LLM 请求阶段才套语音提示词，避免长期记忆被模板污染。 |
-| 可控触发范围 | 可分别控制私聊、群聊、仅被 @ 或唤醒时识别、是否忽略机器人自身消息。 |
-| 友好降级 | 静音、杂音、空结果时可让 LLM 自然地请用户重说。 |
-| 可排障 | 支持显示火山接口 `logid`，便于向火山引擎或运维侧排查问题。 |
+| 语音转写 | 用户发的是语音，LLM 需要文本语义。 |
+| 输入注入 | 转写结果应该成为用户输入，而不是停在插件直接回复。 |
+| 媒体清理 | 原始 `Record(file="xxx.amr")` 如果继续流向 agent，可能触发 `not a valid file`。 |
+| 语气辅助 | 语音转写只有文字，容易丢失“用户正在怎么说”的细微线索。 |
 
-## 2.1.0 语音工作流重建说明
-
-`2.1.0` 不是继续在旧链路上补字段，而是把语音处理拆成五段明确边界：
+所以，本插件更像一个“语音输入适配层”，不是一次性的 ASR 工具。理想链路是：
 
 ```text
-VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest
+用户发送 QQ 语音
+  -> 插件识别语音内容
+  -> 插件把转写文本注入为干净用户输入
+  -> AstrBot 像处理文字消息一样继续调用 LLM
+  -> 记忆、上下文、TTS 和其他插件继续按原流程工作
 ```
 
-这样做的原因很直接：AstrBot 默认 agent 会在构造 LLM 请求时遍历 `event.message_obj.message`，如果里面还残留 `Record(file="xxx.amr")` 这种裸文件名，就可能触发 `Record.convert_to_file_path()` 并报 `not a valid file: xxx.amr`。所以新工作流先把原始语音输入收集成稳定快照，后续不再依赖会被其它插件或框架缓存改写的 `event` 原始结构。
+---
 
-| 阶段 | 新职责 |
+## 版本主线
+
+这份 README 的主叙事以 `v2.0.0` 为中心。原因很简单：`v2.0.0` 定义了这个插件和普通 ASR 插件之间最关键的差异，也就是“语音输入不仅有内容，还可以有受控的语气参考层”。
+
+| 版本段 | 定位 | README 中的处理方式 |
+| :--- | :--- | :--- |
+| `v1.x` | 基础语音识别与早期注入 | 只作为历史背景。 |
+| `v2.0.0` | 引入情绪判断 LLM 与 `respect_weight` | 作为核心能力详细介绍。 |
+| `v2.1.0` | 重建五段式语音工作流 | 作为可靠性架构说明。 |
+| `v2.1.x` | 真实部署中的 bugfix 与兼容加固 | 收进修补史，不抢主叙事。 |
+
+后续版本还会继续修 bug、补边界、加诊断。可是，不、不对，项目主页不能被 bug 日志淹没。主页应该先说明这个插件为什么值得用，`CHANGELOG.md` 再负责记录一路修了什么。
+
+---
+
+## 为什么不是普通 ASR 插件
+
+| 普通语音转写插件 | 本插件 |
 | :--- | :--- |
-| `VoiceInput` | 只在消息事件开始时收集一次语音段，兼容 AstrBot 消息链、`message_obj`、`raw_message`、裸 OneBot `record` dict，以及 NapCat 常见 `file` / `path` / `url` / `base64` 字段。 |
-| `AudioPayloadResult` | 把一条语音变成火山 ASR 可消费的 `url` 或 `data`，同时记录来源、真实格式、输入大小、是否转码、输出格式和输出大小。 |
-| `ASR` | 只负责调用火山引擎并返回 `AsrResult`，空文本、静音、下载失败、转码失败都会写入结构化诊断。 |
-| `VoiceInjectionPlan` | 明确区分 `memory_text`、`llm_text`、`raw_text` 和 `unclear`，成功或未听清时统一把事件消息链改成纯 `Plain` 文本。 |
-| `ProviderRequest` | 在 `on_llm_request` 阶段清理本轮请求里的音频残留，并强制让主 LLM 收到 `llm_text`。即使 `req.prompt` 被 AstrBot 或其它插件包装到找不到纯转写文本，也不再静默跳过。 |
+| 识别后直接回复“语音转文字：xxx” | 默认把转写文本注入为用户输入。 |
+| 只关心 ASR 成功与否 | 同时关心 LLM、TTS、记忆、上下文和 agent 后续处理。 |
+| 原始语音段可能继续污染流程 | 主动清理 `Record`、音频 URL、缓存和上下文字段。 |
+| 只输出文本 | 可选增加情绪判断 LLM，给主 LLM 一个受限的语气参考。 |
+| 遇到 Docker / NapCat 路径隔离时难定位 | `/volc_asr_status` 和日志说明会区分官方前置预处理、插件链路、agent 后段。 |
 
-这版的核心策略是：
-
-- 成功注入路径不调用 `event.stop_event()`，因为 `stop_event()` 会阻止后续默认 LLM / agent 流程。
-- 识别失败、直接回复转写、配置错误这类不需要默认 LLM 继续处理原语音的路径，仍按配置或错误状态阻断事件，避免旧 `Record` 继续流转。
-- 默认继续推荐 `submit_mode=base64`：先由 AstrBot 所在机器读取、下载或转码，再提交给火山引擎，避免临时 URL、内网 URL、NapCat raw silk URL 被火山侧直接访问失败。
-- `submit_mode=url` 只会直传明确属于 `.wav` / `.mp3` / `.ogg` / `.opus` 的 HTTP(S) URL；`.amr` / `.silk` 这类 QQ 语音会回落到下载、转码和 Base64 上传。
-
-## 2.1.1 语音 Record 清理修复
-
-`2.1.1` 继续收紧语音残留清理边界，重点修复情绪判断和直接回复路径可能让旧 `Record(file="xxx.amr")` 继续进入 agent 的问题。
-
-- 情绪判断前会先清理当前语音 `Record`，再把转写文本和可用上下文交给情绪判断 LLM。
-- 识别失败、配置错误、未听清直接提示、`reply_transcription=true` 直接回复转写等不需要默认 LLM 继续处理原语音的路径，会先 `stop_event()`，再发送回复。
-- 这样可以避免后续 agent 或媒体转换逻辑继续读取裸 `.amr` 文件名，减少 `not a valid file: xxx.amr`。
-
-## 2.1.12 上传安装包结构修复
-
-`2.1.12` 不改 ASR、ffmpeg、agent 清理和情绪判断主链路，只修复 Release zip 的上传安装结构。AstrBot v4.24.2 的上传解压器会把 zip 第一项当作外层目录，如果发布包顶层直接平铺 `CHANGELOG.md`、`main.py`、`metadata.yaml`，就可能在安装时触发 `[Errno 20] Not a directory: .../CHANGELOG.md`。
-
-- Release zip 顶层现在固定为一个 `astrbot_plugin_volcengine_asr/` 目录。
-- `metadata.yaml`、`main.py`、`_conf_schema.json`、`requirements.txt`、`README.md`、`CHANGELOG.md` 和内置 `ffmpeg` 都放在该目录内。
-- 打包脚本会校验 zip 第一项、顶层目录、必需文件和 `bin/linux-x86_64/ffmpeg` 的可执行权限。
-- `v2.1.11` 的运行期修复仍然保留；新安装和升级请使用 `v2.1.12` Release 附件。
-
-## 2.1.11 ProviderRequest 活对象保护修复
-
-`2.1.11` 继续修复 AstrBot v4.24.2 的 `agent request` 阶段缓存残留。真实环境里，如果旧 `.amr` 残留藏在 `event.extras["request"]`、`event.extras["req"]`、`message_obj.extras["llm_request"]` 或 mapping 形态的 `run_context` 中，旧版本可能继续触发 `not a valid file: xxx.amr`。进一步加固时，如果把 AstrBot 的 `ProviderRequest` 活对象替换成普通 `dict`，又会触发 `'dict' object has no attribute 'model_dump_for_context'`。
-
-- `request`、`req`、`llm_request` 等 ProviderRequest 别名现在会原地清理内部音频字段，不再被跳过。
-- 带 `model_dump_for_context()` 的 AstrBot 请求对象会被识别为 ProviderRequest-like 并保留对象身份，不会再被序列化成 `dict` 写回缓存。
-- `run_context` 支持 dict/mapping 形态清理，并扩展 `cached_content`、`cached_messages`、`history`、`input_messages`、`conversation`、`session` 等缓存字段。
-- 普通 URL、普通 `files/path` 和普通 extras 会继续保留；只有确认含音频引用、`Record` 或 `.amr/.silk` 等音频痕迹时才净化。
-
-## 2.1.10 发布通道重发说明
-
-`2.1.10` 的运行时代码沿用 `2.1.9` 的 agent 前未知缓存与 `run_context` 清理加固。由于 GitHub 对已创建的 `v2.1.9` Release 触发 immutable release 限制，无法再为该 Release 补上传插件 zip 附件，所以正式可下载版本改为 `v2.1.10`。
-
-- `v2.1.10` 已被 `v2.1.12` 取代；新安装和升级请使用最新 Release 附件。
-- 不要安装 GitHub 自动生成的 Source code zip。
-- `v2.1.9` tag 仅保留为历史提交点，实际安装请使用最新 Release。
-
-## 2.1.9 agent 前未知缓存与 run_context 清理加固
-
-`2.1.9` 继续收紧 `agent_sub_stages.internal:402` 前的兜底清理。它不改变火山 ASR、ffmpeg 转码或情绪判断主链路，只在 AstrBot 即将构建 agent 时，再清理一轮可能藏着旧 `Record(file="xxx.amr")` 的缓存。
-
-- `on_agent_begin` 现在会接收 `run_context`，并清理其中的 `messages`、`stage_data`、`cache`、`payload` 等可见缓存字段。
-- `event.extras` / `message_obj.extras` 里的未知缓存 key 也会递归净化，减少其它插件或适配器把旧 `.amr` 残留带进官方 agent 的概率。
-- 清理时会保留 `ProviderRequest` 对象和事件对象引用，例如 `run_context.event`，避免把 AstrBot 后续还要使用的活对象改坏。
-- 这仍然不是 AstrBot 私有 pipeline monkey patch。官方 `preprocess_stage` 仍发生在插件 handler 之前；如果只剩 `preprocess_stage` warning，请继续按 Docker 共享卷、NapCat `get_record` 和官方预处理路径排查。
-
-## 2.1.8 异形缓存 Record 兜底与情绪权重接口
-
-`2.1.8` 不重写主工作流，重点补一个很窄但实际容易踩到的边界：有些适配器或其它插件会把 OneBot / NapCat 的 `Record(file="xxx.amr")` 缓存在 `event.extras`、`message_obj.extras`、`request`、`input`、`messages`、`content` 等字段里。旧版主消息链已经清干净时，这些缓存仍可能让后续官方 agent 再看到旧语音段。
-
-- `_find_records()` 现在会额外扫描 `event.extras` / `event._extras` / `event.extra` 和 `message_obj` 上的同名缓存容器。
-- 这些缓存里的嵌套 `Record` 会被纳入插件接管流程，继续走 `get_record`、ffmpeg 转码、火山 ASR、干净 `ProviderRequest` 注入。
-- `event.extras` / `message_obj.extras` 中的 `data`、`segments`、`original_message` 等异形缓存字段会在识别成功后同步清理。
-- 新增 `EmotionWeightingPolicy` 接口，默认公式保持不变；后续分支要调整情绪 `respect_weight` 计算时，可替换 `self.emotion_weighting_policy`，不需要改 ASR 主流程。
-- 这不是 AstrBot 私有 pipeline monkey patch。官方 `preprocess_stage` 仍发生在插件 handler 之前；如果只剩 `preprocess_stage` warning，请按 Docker 共享卷、NapCat `get_record` 和官方预处理路径排查。
-
-## 2.1.4 AstrBot 更新器与官方 agent 兼容修复
-
-`2.1.4` 修复两个 AstrBot 侧交接问题。
-
-第一，修复插件页更新时报 `Plugin astrbot_plugin_volcengine_asr does not specify a repository URL.` 的问题。原因是 `metadata.yaml` 中的 `repo` 字段此前为空，AstrBot 更新器无法知道应该从哪个 GitHub 仓库检查新版。
-
-第二，修复官方 agent 仍按旧 `Record(file="xxx.amr")` 消息链重新构造请求的问题。插件成功识别语音后，会直接向 AstrBot `ProcessStage` yield 一个干净 `ProviderRequest`，并调用 `event.should_call_llm(True)` 阻止默认 LLM 流程再次重入，避免 `agent_sub_stages` 再触发 `Record.convert_to_file_path()`。
-
-- 根目录和发布包目录的 `metadata.yaml` 都已写入 `https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr`。
-- 已安装旧版的用户建议先手动上传 `2.1.4` Release zip；安装后，后续 AstrBot 插件页更新才能读取到仓库地址。
-- `preprocess_stage` 中官方语音预处理的 warning 发生在插件 handler 之前；若关闭插件仍看到这条 warning，需要关闭 AstrBot 官方 STT/语音预处理或让 NapCat 提供真实可读文件。但插件开启后不应再继续进入 `agent_sub_stages` 的旧 Record 媒体扫描。
-
-## 2.1.3 发布通道修复
-
-`2.1.3` 不改变语音识别主工作流，重点修复 GitHub Release 发布通道：`v2.1.2` 在 GitHub 侧已被 immutable release 机制占用，继续发布会出现 `tag name was used by an immutable release`。本版本使用新的 `v2.1.3` tag 重新构建发布包，并重新生成 UTF-8 发布说明，避免草稿页面正文乱码和不可变 tag 冲突。
-
-- 插件代码沿用 `2.1.2` 的 QQ AMR 取回、`get_record` 兜底、干净 `provider_request` 与消息链原地清理逻辑。
-- Release 附件仍只上传 `output/astrbot_plugin_volcengine_asr.zip`，不要上传仓库根目录旧 zip。
-- 如果你看到旧 `v2.1.2` 草稿，不要继续发布它；请使用 `v2.1.3` Release。
-
-## 2.1.2 干净 ProviderRequest 修复
-
-`2.1.2` 继续修复 AstrBot 内置 agent 的前置媒体扫描问题：`build_main_agent` 在构造 `ProviderRequest` 前会扫描 `event.message_obj.message` / `Reply.chain`，如果里面还有 `Record(file="xxx.amr")`，就可能触发 `Record.convert_to_file_path()` 并报 `not a valid file: xxx.amr`。
-
-- 新增干净 `provider_request`，在默认 agent 构造请求前绕开本轮语音媒体扫描，让主 LLM 只接收转写后的文本。
-- 清理逻辑兼容非 list 形态的 `MessageChain`，避免消息链不是普通 list 时留下旧 `Record`。
-- 当 OneBot / NapCat 只给出裸 `file="xxx.amr"` 且组件自身 `convert_to_base64()` 失败时，插件会尝试调用 `get_record(file, out_format)` 取回真实语音内容，再交给 `ffmpeg` 转码。
-
-## 重建后的语音工作流
-
-默认推荐流程如下：
+一个常见例子是 QQ / NapCat 语音段：
 
 ```text
-QQ 语音 Record
-  -> 收集 VoiceInput 快照
-  -> 读取 base64 / path / file / url
-  -> 下载或读取音频
-  -> 检测格式与大小
-  -> 必要时调用 ffmpeg 转码
-  -> Base64 提交到火山引擎 ASR
-  -> 得到纯转写文本
-  -> 可选：情绪判断 LLM 分析转写文本和上下文
-  -> 生成 VoiceInjectionPlan
-  -> 消息事件阶段只注入 Plain 纯文本 memory_text
-  -> LivingMemory 读取和存储干净文本
-  -> LLM 请求阶段清理音频残留并写入 llm_text
-  -> 主 LLM 按参考权重调整语气并生成回复
+Record(file="32c1124cf292f19c30728a54db34992e.amr")
 ```
 
-对应流程图：
+这个 `file` 常常不是 AstrBot 容器内真实存在的文件路径，而是 OneBot / NapCat 的语音标识。如果它被 AstrBot 官方预处理或后续 agent 当作本地文件读取，就可能出现：
 
-```mermaid
-flowchart LR
-    A[QQ 语音 Record] --> B[VoiceInput 快照]
-    B --> C[读取 base64 / path / file / url]
-    C --> D[下载或读取音频]
-    D --> E{格式是否支持}
-    E -->|WAV / MP3 / OGG / OPUS| F[Base64 上传]
-    E -->|AMR / SILK / M4A 等| G[ffmpeg 转码]
-    G --> F
-    F --> H[火山引擎 ASR]
-    H --> I[VoiceInjectionPlan]
-    I --> J[事件消息链改写为 Plain memory_text]
-    J --> K[LivingMemory 检索和存储纯文本]
-    K --> L[on_llm_request 清理音频残留]
-    L --> M[主 LLM 收到 llm_text]
-    M --> N[生成回复]
+```text
+not a valid file: xxx.amr
 ```
 
-这个顺序很重要：记忆插件读到的是用户实际说的话，而不是“请尽量使用语音回复”这类提示词包装。
+所以插件的任务不是“多调一次火山 ASR API”这么薄。它必须把语音安全地转换成后续组件能消费的文本输入，并尽量让旧媒体对象不要继续流进 LLM 请求。
 
-## AstrBot / OneBot / NapCat 兼容依据
+---
 
-本次重建工作流同时参考了 AstrBot、OneBot v11 和 NapCat 的实际语义：
+## 核心能力总览
 
-- AstrBot 的消息事件文档说明，`event.stop_event()` 会停止事件传播，后续步骤不会继续执行；所以本插件在“识别成功并希望默认 LLM 继续回复”的路径上不能使用它。详见 [AstrBot 处理消息事件文档](https://docs.astrbot.app/dev/star/guides/listen-message-event.html)。
-- AstrBot v4.24.2 默认 agent 构造 `ProviderRequest` 时会读取 `event.message_str`，并遍历 `event.message_obj.message` 里的媒体段。若仍有 `Record(file="xxx.amr")` 裸文件名，就可能在 `Record.convert_to_file_path()` 阶段失败。因此插件必须在事件阶段把消息链改写成 `Plain(memory_text)`，并在 LLM 请求阶段兜底清理 `ProviderRequest.audio_urls`。
-- OneBot v11 的语音消息段类型是 `record`，标准接收字段以 `data.file` 为核心，接收侧也可能带 `url`。详见 [OneBot v11 消息段类型：语音](https://283375.github.io/onebot_v11_vitepress/message/segment.html)。
-- OneBot v11 的 `get_record` 标准动作以收到的 `file` 为参数，并通过 `out_format` 请求转换格式。详见 [OneBot v11 公开 API：get_record](https://raw.githubusercontent.com/botuniverse/onebot-11/master/api/public.md)。
-- NapCat 的 `record` 消息段会出现 `file`、`path`、`url`、`file_id`、`file_size`、`file_unique` 等实现扩展字段，但 NapCat 文档也提示语音 URL 可能是 raw silk 资源，不能直接当通用音频交给 ASR。详见 [NapCat 消息格式兼容情况](https://www.napcat.wiki/develop/msg) 和 [NapCat 文件处理框架指南](https://napneko.github.io/develop/file)。
+| 能力 | 默认状态 | 说明 |
+| :--- | :--- | :--- |
+| QQ / OneBot / NapCat 语音识别 | 开启 | 识别 `Record` 组件和 OneBot dict 形态的 record 段。 |
+| 火山引擎豆包语音 ASR | 开启 | 默认使用 `volc.bigasr.auc_turbo` 与 flash recognize API。 |
+| 注入为用户输入 | 开启 | 转写结果默认进入后续 LLM，而不是只由插件直接回复。 |
+| Base64 提交 | 推荐 | 适合 Docker、NapCat、内网临时 URL 和 `.amr/.silk` 场景。 |
+| 自动转码 | 开启 | AMR、SILK、M4A、AAC、FLAC、WEBM 等格式可转为 WAV / MP3 / OGG。 |
+| 内置 ffmpeg | Release zip 默认可用 | Linux x86_64 / amd64 环境可直接使用包内 `ffmpeg`。 |
+| `v2.0.0` 情绪判断 LLM | 默认关闭 | 可选地为主 LLM 提供结构化语气参考。 |
+| 情绪权重公式接口 | 可替换 | `EmotionWeightingPolicy` 使后续分支能换公式而不破坏主链路。 |
+| LivingMemory 友好 | 开启 | 记忆侧只看到干净转写文本，不记录语音提示词模板。 |
+| ProviderRequest 原地净化 | 开启 | 清理音频残留时保留活对象，避免 dict 化破坏 AstrBot 内部调用。 |
+| 状态命令 | 开启 | `/volc_asr_status` 显示版本、鉴权、ffmpeg、提交模式和排障提示。 |
 
-## 安装方式
+---
 
-### 方式一：上传 Release 压缩包
+## 快速开始
 
-这是最推荐的安装方式，尤其适合 Docker、VPS、云服务器和不方便手动安装 `ffmpeg` 的环境。
+### 方式一：上传 Release zip
+
+这是最推荐的安装方式，尤其适合 Docker、VPS、宝塔面板和不方便手动装 `ffmpeg` 的环境。
 
 1. 打开 [GitHub Releases](https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr/releases/latest)。
-2. 下载 `astrbot_plugin_volcengine_asr.zip`。
+2. 下载附件 `astrbot_plugin_volcengine_asr.zip`。
 3. 进入 AstrBot WebUI 的插件页面。
-4. 选择“从文件安装”。
+4. 选择从文件安装。
 5. 上传这个 zip。
 6. 重载插件或重启 AstrBot。
 7. 打开插件配置页，填写火山引擎鉴权信息。
 
-Release zip 顶层应只有一个插件目录，目录内包含插件文件：
+重要提醒：
+
+```text
+请下载 Release 页面里的 astrbot_plugin_volcengine_asr.zip。
+不要把 GitHub 绿色 Code 按钮下载的 Source code zip 当作安装包。
+```
+
+Release zip 从 `v2.1.12` 起固定为单顶层目录结构：
 
 ```text
 astrbot_plugin_volcengine_asr/
@@ -276,12 +197,1057 @@ astrbot_plugin_volcengine_asr/
 ├── requirements.txt
 ├── README.md
 ├── CHANGELOG.md
-├── assets/VoiceMountain.svg
-├── assets/FuckUCodeScore.svg
-└── bin/linux-x86_64/ffmpeg
+├── assets/
+├── bin/linux-x86_64/ffmpeg
+└── third_party_licenses/
 ```
 
-不要把插件文件直接平铺在 zip 顶层，例如：
+### 方式二：从 GitHub 仓库安装
+
+在 AstrBot WebUI 里使用仓库地址：
+
+```text
+https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr
+```
+
+如果 WebUI 需要 `.git` 后缀，也可以使用：
+
+```text
+https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr.git
+```
+
+仓库安装会读取仓库根目录的 `metadata.yaml`、`main.py`、`_conf_schema.json` 和 `requirements.txt`。但仓库安装不等同于 Release zip 安装：仓库根目录不会带 Release 包内置的 `bin/linux-x86_64/ffmpeg`，因此会依赖 `imageio-ffmpeg` 或系统 PATH 中的 `ffmpeg`。
+
+### 方式三：手动放入插件目录
+
+把插件目录放入 AstrBot 的 `data/plugins/` 下：
+
+```text
+data/plugins/
+└── astrbot_plugin_volcengine_asr/
+    ├── metadata.yaml
+    ├── main.py
+    ├── _conf_schema.json
+    ├── requirements.txt
+    └── bin/linux-x86_64/ffmpeg
+```
+
+---
+
+## 最小配置
+
+### 火山引擎侧准备
+
+1. 开通豆包语音识别能力。
+2. 确认资源 ID 为 `volc.bigasr.auc_turbo`，或按你的控制台实际资源修改。
+3. 新版控制台优先使用 `api_key`。
+4. 旧版控制台可使用 `app_key + access_key`。
+
+### 推荐配置
+
+| 配置项 | 推荐值 | 说明 |
+| :--- | :--- | :--- |
+| `api_key` | 你的火山引擎 API Key | 新版鉴权优先使用。 |
+| `resource_id` | `volc.bigasr.auc_turbo` | 豆包语音大模型录音文件极速版。 |
+| `submit_mode` | `base64` | 最适合 OneBot / NapCat / Docker。 |
+| `enable_transcode` | `true` | 自动处理 AMR、SILK 等格式。 |
+| `prefer_bundled_ffmpeg` | `true` | Release zip 在 Linux x86_64 环境开箱可用。 |
+| `inject_as_user_input` | `true` | 把语音转写注入为用户输入。 |
+| `reply_transcription` | `false` | 默认不直接回复“语音转文字：xxx”。 |
+| `enable_emotion_analysis` | `false` | 情绪判断默认关闭，需要时再启用。 |
+
+一条可用的基础配置：
+
+```text
+api_key = 你的火山引擎 API Key
+resource_id = volc.bigasr.auc_turbo
+submit_mode = base64
+enable_transcode = true
+prefer_bundled_ffmpeg = true
+inject_as_user_input = true
+reply_transcription = false
+enable_emotion_analysis = false
+```
+
+### 调试配置
+
+如果你只想确认 ASR 是否通，可以临时打开：
+
+```text
+reply_transcription = true
+```
+
+这会让插件直接回复转写结果，方便排查火山鉴权、音频读取和 ffmpeg。确认主链路可用后，建议改回：
+
+```text
+reply_transcription = false
+inject_as_user_input = true
+```
+
+---
+
+## 2.0.0 核心能力：情绪判断 LLM
+
+`v2.0.0` 引入的不是心理诊断，也不是让另一个模型替用户下结论。它引入的是一个可选的、结构化的、受权重约束的“语气参考层”。
+
+完整工作流：
+
+```mermaid
+flowchart TB
+  classDef input fill:#f8fafc,stroke:#64748b,color:#0f172a
+  classDef core fill:#eff6ff,stroke:#2563eb,color:#172554
+  classDef emotion fill:#fdf2f8,stroke:#db2777,color:#831843
+  classDef guard fill:#fefce8,stroke:#ca8a04,color:#713f12
+  classDef output fill:#ecfdf5,stroke:#059669,color:#064e3b
+
+  A["用户发送 QQ 语音"] --> B["Volcengine ASR<br/>得到纯转写文本"]
+  B --> C{"enable_emotion_analysis ?"}
+
+  C -- "false" --> D["跳过情绪层<br/>直接生成干净输入"]
+
+  C -- "true" --> E["构造情绪判断 prompt<br/>ASR 文本 + 可用上下文"]
+  E --> F["Emotion LLM<br/>只允许输出 JSON"]
+  F --> G["JSON 清洗与校验<br/>label / weights / confidence / evidence"]
+  G --> H["EmotionWeightingPolicy<br/>entropy + confidence + evidence"]
+  H --> I["计算 respect_weight<br/>受上限与短文本规则约束"]
+  I --> J["生成 Tone Hint<br/>只作为主 LLM 语气参考"]
+
+  D --> K["写入 event.message_str<br/>写入 message_obj.message_str<br/>仅写纯转写文本"]
+  J --> L["追加到 llm_text<br/>不写入消息链 / 长期记忆"]
+
+  K --> M["LivingMemory<br/>读取并保存纯文本"]
+  K --> N["主 LLM 输入<br/>原始上下文 + 纯转写文本"]
+  L --> N
+  N --> O["主 LLM 按参考权重<br/>调整语气与回复"]
+
+  class A input
+  class B,D,K core
+  class C guard
+  class E,F,G,H,I,J,L emotion
+  class M,N,O output
+```
+
+图里有两条关键边界：`enable_emotion_analysis=false` 时不会额外调用情绪 LLM；`enable_emotion_analysis=true` 时，情绪结果也只进入主 LLM 的 `llm_text` 辅助提示，不会写进 `event.message_str`、`message_obj.message_str` 或 LivingMemory。
+
+### 这个模块解决什么问题
+
+纯文本 ASR 会丢掉许多语音里的线索。用户说“算了”“随便”“没事”“嗯”时，单看文字很难判断它是轻松、疲惫、焦虑、委屈，还是只是识别结果太短。主 LLM 如果完全忽略语气，回复可能显得冷；如果过度脑补，又可能显得冒犯。
+
+`v2.0.0` 的情绪判断模块把这个问题拆成三层：
+
+| 层级 | 做什么 | 不做什么 |
+| :--- | :--- | :--- |
+| 情绪判断 LLM | 根据转写文本和少量上下文输出结构化 JSON。 | 不直接命令主 LLM。 |
+| 本地权重公式 | 根据置信度、分布确定性、证据强度计算 `respect_weight`。 | 不让模型自己决定影响力度。 |
+| 主 LLM 提示辅助 | 只提示“可以参考这种语气”。 | 不覆盖用户明确请求，不写入长期记忆。 |
+
+### 默认关闭
+
+情绪判断默认关闭：
+
+```text
+enable_emotion_analysis = false
+```
+
+因为它会额外调用一次 LLM，带来延迟和 token 消耗。只有当你希望语音回复更细腻、更像自然对话时，才建议打开：
+
+```text
+enable_emotion_analysis = true
+emotion_context_turns = 4
+emotion_max_respect_weight_percent = 60
+emotion_fail_open = true
+```
+
+### 情绪判断 JSON
+
+情绪判断 LLM 被要求只输出 JSON，例如：
+
+```json
+{
+  "label": "anxious",
+  "emotion_weights": {
+    "neutral": 0.15,
+    "anxious": 0.65,
+    "tired": 0.20
+  },
+  "confidence": 0.72,
+  "valence": -0.35,
+  "arousal": 0.48,
+  "voice_text_support": 0.70,
+  "context_support": 0.45,
+  "reason": "用户语句带有不确定与催促意味，但上下文证据有限。"
+}
+```
+
+这些字段不会直接写进 `event.message_str`，也不会替换原始语音文本进入 LivingMemory。它们只用于构造主 LLM 的辅助提示。
+
+<details>
+<summary>展开：主 LLM 可能看到的辅助提示示例</summary>
+
+假设用户语音转写为：
+
+```text
+你先别急着改，我怕又把能跑的地方弄坏了。
+```
+
+情绪判断结果可能被整理成类似提示：
+
+```text
+以下是语音输入的辅助判断，不是事实结论，也不能覆盖用户明确请求：
+- 可能情绪：anxious
+- 参考权重：0.41
+- 理由：用户担心修复引入回归，语气偏谨慎。
+
+请主 LLM 只在语气、解释密度和安抚程度上有限参考它。
+不要替用户断言情绪，不要把情绪判断写入长期记忆。
+用户语音转写内容：
+你先别急着改，我怕又把能跑的地方弄坏了。
+```
+
+主 LLM 的核心任务仍然是回答用户请求。情绪信息只影响“怎么说”，不改变“该做什么”。
+
+</details>
+
+### 结果写入边界
+
+| 位置 | 是否写入情绪判断 |
+| :--- | :--- |
+| `event.message_str` | 不写入，只保留干净转写文本。 |
+| `message_obj.message_str` | 不写入，只同步干净转写文本。 |
+| 消息链 `Plain` | 不写入，只放 `memory_text`。 |
+| LivingMemory | 不写入情绪提示词，避免污染长期记忆。 |
+| ProviderRequest / 主 LLM 请求 | 可附加受限的情绪辅助提示。 |
+| event extras | 可保存结构化诊断字段，供后续排障或 Web UI 使用。 |
+
+这也是 `v2.0.0` 的关键设计：情绪判断可以帮助回复更有温度，但不能把“模型猜测”伪装成“用户事实”。
+
+---
+
+## 情绪权重计算与论证
+
+这一节是文档里最像论文的部分。默认先给结论和公式，完整论证放在折叠块里。
+
+### 变量定义
+
+设语音转写文本长度为 $N$，情绪判断 LLM 给出的主观置信度为 $C$，情绪分布为：
+
+$$
+\mathbf{p} = (p_1, p_2, \ldots, p_n),
+\qquad
+p_i \ge 0,\quad \sum_{i=1}^{n} p_i = 1
+$$
+
+其中 $p_i$ 表示第 $i$ 个情绪标签的概率或权重。再设：
+
+| 符号 | 含义 |
+| :--- | :--- |
+| $C$ | 情绪判断 LLM 输出的 `confidence`，范围 $[0, 1]$。 |
+| $C_{\mathrm{e}}$ | 根据情绪分布熵计算出的确定性。 |
+| $S_{\mathrm{v}}$ | `voice_text_support`，语音文本本身提供的证据强度。 |
+| $S_{\mathrm{c}}$ | `context_support`，上下文提供的证据强度。 |
+| $L$ | 文本长度因子。 |
+| $S$ | 综合证据强度。 |
+| $w_{\max}$ | 配置项 `emotion_max_respect_weight_percent` 换算出的最大参考权重。 |
+| $w$ | 最终 `respect_weight`。 |
+
+### 熵与确定性
+
+先计算 Shannon entropy：
+
+$$
+H(\mathbf{p}) = -\sum_{i=1}^{n} p_i \ln p_i
+$$
+
+再把熵归一化为确定性：
+
+$$
+C_{\mathrm{e}} =
+\begin{cases}
+1 - \dfrac{H(\mathbf{p})}{\ln n}, & n > 1 \\
+1, & n \le 1
+\end{cases}
+$$
+
+直观解释是：如果情绪分布高度集中，比如 `anxious: 0.9`，确定性更高；如果 `neutral / anxious / tired` 接近平均，确定性更低。
+
+### 文本长度因子
+
+短语音常常证据不足。插件使用对数长度因子：
+
+$$
+L = \min\left(1, \frac{\ln(1+N)}{\ln 81}\right)
+$$
+
+当 $N$ 很短时，$L$ 较小；当 $N$ 接近或超过 80 个字符时，长度因子接近 1。
+
+### 综合证据强度
+
+语音文本证据比上下文更直接，所以权重更高：
+
+$$
+S = L \cdot \left(0.7S_{\mathrm{v}} + 0.3S_{\mathrm{c}}\right)
+$$
+
+### 最终参考权重
+
+默认公式为：
+
+$$
+\tilde{w}
+= w_{\max} \cdot \left(0.5C + 0.3C_{\mathrm{e}} + 0.2S\right)
+$$
+
+边界约束：
+
+$$
+w
+= \operatorname{clamp}(\tilde{w}, 0, w_{\max})
+= \min\left(\max(\tilde{w}, 0), w_{\max}\right)
+$$
+
+短文本额外限制：
+
+$$
+N < 12
+\quad\Longrightarrow\quad
+w \leftarrow \min(w, 0.25)
+$$
+
+代码会把最终结果四舍五入到 3 位小数。这个权重不是“情绪强度”，也不是“主 LLM 必须服从的命令”。它只是告诉主 LLM：这份情绪判断最多可以影响回复语气到什么程度。
+
+### 接口化设计
+
+为了让后续分支能安全调整公式，`v2.1.8` 起把权重计算抽成了接口：
+
+```python
+@dataclass(slots=True)
+class EmotionWeightingInput:
+    transcript_chars: int
+    confidence: float
+    emotion_weights: dict[str, float]
+    voice_text_support: float
+    context_support: float
+    max_respect_weight: float
+
+
+class EmotionWeightingPolicy(Protocol):
+    def compute_respect_weight(self, data: EmotionWeightingInput) -> float:
+        ...
+```
+
+默认实现是 `DefaultEmotionWeightingPolicy`。如果后续分支要改情绪公式，建议只替换：
+
+```python
+self.emotion_weighting_policy
+```
+
+不要直接改 ASR、转码、消息注入或 ProviderRequest 清理主链路。少、少啰嗦，这条边界很重要，因为情绪策略应该可替换，语音识别主流程必须稳。
+
+<details>
+<summary>展开：像论文一样看完整设计论证</summary>
+
+### 摘要
+
+语音转写插件在聊天机器人系统中通常只解决音频到文本的转换问题。然而，在 AstrBot 这类多阶段 agent 系统中，语音输入还会经过上下文、记忆、LLM 请求构造、TTS 等环节。若插件只返回转写文本，则会丢失用户说话方式中的情绪线索；若插件把情绪判断强行写入消息链，又会污染长期记忆并放大模型误判。因此，本插件在 `v2.0.0` 中引入受限情绪参考层，以结构化 JSON 和本地权重公式控制情绪信息对主 LLM 的影响。
+
+### 问题定义
+
+设一次语音输入事件为：
+
+$$
+E = (A, T, \mathrm{Ctx}, M)
+$$
+
+其中 $A$ 是原始音频，$T$ 是 ASR 转写文本，$\mathrm{Ctx}$ 是可用上下文，$M$ 是 AstrBot 内部消息对象和缓存。普通 ASR 插件通常只实现：
+
+$$
+f_{\mathrm{asr}}(A) \rightarrow T
+$$
+
+但语音对话中还存在一个隐变量：
+
+$$
+Z = \operatorname{Emotion}(T, \mathrm{Ctx})
+$$
+
+$Z$ 不应被视为事实，只能被视为对用户会话状态的弱推断。如果直接把 $Z$ 写入消息链，系统会产生两个风险：
+
+1. 记忆污染：长期记忆可能记录“用户很焦虑”这种模型推断，而不是用户实际说过的话。
+2. 行为过拟合：主 LLM 可能过度安抚、过度道歉或偏离用户明确请求。
+
+因此插件需要一个受约束的辅助变量：
+
+$$
+A_{\mathrm{w}} = (Z, w)
+$$
+
+其中 $w$ 表示情绪判断对主 LLM 语气的最大参考权重。
+
+### 为什么使用情绪分布而不是单标签
+
+单标签情绪判断可以写作：
+
+$$
+z = \operatorname*{arg\,max}_{i} p_i
+$$
+
+但语音短句经常具有多义性。比如“没事”可能是轻松、疲惫、委屈，也可能是话题结束。只保留 $\operatorname*{arg\,max}$ 会抹掉不确定性。保留分布 $\mathbf{p}$ 可以进一步计算熵：
+
+$$
+H(\mathbf{p}) = -\sum_i p_i \ln p_i
+$$
+
+熵越高，说明模型越不确定；熵越低，说明判断越集中。把熵转为确定性 $C_{\mathrm{e}}$，可以避免“模型嘴上很自信，但分布很分散”的结果过度影响主 LLM。
+
+### 为什么文本长度要进入公式
+
+ASR 文本长度 $N$ 是一个粗糙但有效的证据规模指标。短文本并不必然不可靠，但短文本更容易缺失语义、语气和指代对象。因此公式使用：
+
+$$
+L = \min\left(1, \frac{\ln(1+N)}{\ln 81}\right)
+$$
+
+对数增长可以避免长文本无限增加权重。选择 80 字左右作为接近饱和的经验尺度，是为了适配聊天语音的常见长度：它通常比一句短命令长，但远小于正式段落。
+
+### 为什么语音文本证据占 70%，上下文占 30%
+
+上下文能帮助理解用户语气，但它也可能引入错误迁移。例如用户上一轮很生气，不代表这一轮仍然生气。语音转写文本是当前输入的直接证据，所以插件使用：
+
+$$
+S = L \cdot \left(0.7S_{\mathrm{v}} + 0.3S_{\mathrm{c}}\right)
+$$
+
+这里 $S_{\mathrm{v}}$ 是当前语音文本证据，$S_{\mathrm{c}}$ 是上下文证据。上下文可以修正判断，但不应主导判断。
+
+### 为什么短文本要封顶
+
+当 $N < 12$ 时，最终权重被限制：
+
+$$
+w \le 0.25
+$$
+
+这是为了处理“嗯”“算了”“随便”“好吧”这类短语音。它们在真实聊天里很重要，但也极易被误判。封顶不是说短句不表达情绪，而是说模型在短句上不应拥有太大的行为影响力。
+
+### 与心理诊断的边界
+
+本插件不做心理诊断。它没有声学情绪识别模型，没有临床量表，没有用户长期状态建模。它只根据 ASR 文本和少量上下文生成会话语气参考。更形式化地说，插件不声明：
+
+$$
+\mathrm{UserState} = Z
+$$
+
+它只声明：
+
+$$
+\mathrm{Response} = \operatorname{LLM}(T, \mathrm{Ctx}, A_{\mathrm{w}})
+$$
+
+其中 $A_{\mathrm{w}}$ 是弱辅助变量。主 LLM 必须优先服从用户明确请求和系统规则。
+
+### 失效条件
+
+情绪判断在这些情况下应被降低影响或跳过：
+
+1. ASR 文本极短。
+2. ASR 结果可能错字较多。
+3. 上下文和当前语音互相冲突。
+4. 情绪分布接近平均，熵较高。
+5. 情绪 LLM 返回无效 JSON。
+6. 情绪 LLM 调用超时。
+
+默认配置 `emotion_fail_open = true`，表示情绪判断失败时继续普通语音流程。语音识别主链路不应因为情绪辅助失败而中断。
+
+### 理论来源：不是凭空捏造的情绪算法
+
+插件的情绪算法并非凭空捏造，也不是让 LLM 随口给用户贴一个情绪标签。它把几类可追溯的研究思想做成了保守的工程融合：用 Shannon entropy 表示情绪分布的不确定性，用 valence / arousal 与离散情绪标签组织情绪空间，用置信度和证据强度限制模型判断的影响范围，最后只把结果作为主 LLM 的语气参考。
+
+换句话说，这套算法参考的是“如何表达不确定性、如何描述情绪空间、如何让对话系统有限参考情绪线索”这些成熟问题，而不是声称插件拥有心理诊断能力。可检索的理论来源包括：
+
+| 参考方向 | 在插件中的作用 |
+| :--- | :--- |
+| Shannon entropy | 衡量 `emotion_weights` 分布是否集中，用于计算确定性。 |
+| Russell circumplex model | 支撑 `valence` / `arousal` 这类情绪维度表达。 |
+| Plutchik emotion model | 支撑离散情绪标签的组织方式。 |
+| Model calibration / uncertainty estimation | 约束 LLM 置信度，避免高不确定结果过度影响主回复。 |
+| Affective dialogue systems | 支撑“情绪只作为对话语气辅助，而不是事实判断”的边界。 |
+
+</details>
+
+---
+
+## 语音工作流
+
+`v2.1.0` 是语音工作流重建版本。它把 QQ 语音进入 AstrBot / LLM 的过程拆成五个稳定阶段：
+
+```text
+VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest
+```
+
+下图把主链路、官方前置阶段、可选情绪层和失败阻断路径分开画。读图时要注意：`preprocess_stage` 属于 AstrBot 官方前置阶段，发生在插件 handler 之前；`v2.0.0` 情绪判断层是可选侧路，不是 ASR 主链路的必要条件。
+
+```mermaid
+flowchart LR
+  classDef external fill:#f8fafc,stroke:#64748b,color:#0f172a
+  classDef official fill:#fff7ed,stroke:#f97316,color:#7c2d12
+  classDef plugin fill:#eff6ff,stroke:#2563eb,color:#172554
+  classDef emotion fill:#fdf2f8,stroke:#db2777,color:#831843
+  classDef guard fill:#fef2f2,stroke:#dc2626,color:#7f1d1d
+  classDef downstream fill:#ecfdf5,stroke:#059669,color:#064e3b
+
+  subgraph EXT["外部事件层"]
+    direction TB
+    A["QQ / OneBot / NapCat<br/>Record(file / url / base64 / path)"]
+  end
+
+  subgraph PRE["AstrBot 官方前置阶段"]
+    direction TB
+    B["PreProcessStage<br/>官方媒体预处理"]
+    B1["warning: not a valid file: xxx.amr<br/>发生在插件 handler 之前"]
+  end
+
+  subgraph CORE["Volcengine ASR Plugin Handler"]
+    direction TB
+    C["Trigger Gate<br/>私聊 / 群聊 / @ / 唤醒 / ignore_self"]
+    D["1. VoiceInput<br/>冻结 Record 快照与 sources"]
+    E["2. AudioPayloadResult<br/>local / download / get_record / base64 / ffmpeg"]
+    F["3. Volcengine ASR<br/>AsrResult(text, logid, request_id)"]
+    G["4. VoiceInjectionPlan<br/>memory_text / llm_text / raw_text / diagnostics"]
+    H["Event Sanitizer<br/>消息链替换为 Plain(memory_text)<br/>清理旧 Record 缓存"]
+    I["5. ProviderRequest Guard<br/>原地净化 messages / contexts / files / audio_urls"]
+  end
+
+  subgraph EMO["v2.0.0 可选情绪参考层"]
+    direction TB
+    X["Emotion LLM<br/>ASR text + context -> JSON"]
+    Y["EmotionWeightingPolicy<br/>confidence + entropy + evidence -> respect_weight"]
+    Z["Tone Hint<br/>只进入 llm_text<br/>不写入消息链 / 长期记忆"]
+  end
+
+  subgraph DOWN["AstrBot 后续消费层"]
+    direction TB
+    J["Main LLM / Agent<br/>继续处理干净文本输入"]
+    K["LivingMemory<br/>只记录 memory_text"]
+    L["TTS / Other Plugins<br/>按普通文字链路工作"]
+  end
+
+  subgraph FAIL["失败 / 绕过路径"]
+    direction TB
+    M["配置失败 / 音频读取失败 / ffmpeg失败<br/>ASR失败 / 直回转写 / 触发范围不满足"]
+    N["用户可见提示或直接转写<br/>必要时 stop_event 防止旧 Record 后流"]
+  end
+
+  A --> B
+  B -. "event reaches handler" .-> C
+  B -. "warning before plugin" .-> B1
+  B1 -. "plugin cannot publicly disable this stage" .-> C
+
+  C --> D --> E --> F --> G --> H --> I --> J --> L
+  H --> K
+
+  F -. "enable_emotion_analysis=true" .-> X
+  X --> Y
+  Y --> Z
+  Z -. "tone hint only" .-> G
+  X -. "fail_open" .-> G
+
+  C -. "filtered" .-> M
+  E -. "payload error" .-> M
+  F -. "empty / ASR error" .-> M
+  M --> N
+
+  class A external
+  class B,B1 official
+  class C,D,E,F,G,H,I plugin
+  class X,Y,Z emotion
+  class M,N guard
+  class J,K,L downstream
+```
+
+图例：实线表示主处理链路，虚线表示可选侧路、前置 warning 或失败分支。`Emotion LLM` 失败时默认 `fail_open`，普通语音识别链路继续；`Tone Hint` 只回到 `llm_text`，不写入消息链和长期记忆。
+
+| 阶段 | 职责 |
+| :--- | :--- |
+| `VoiceInput` | 在事件刚进入插件时收集语音快照，包括原始 `Record`、序号、可用 source。 |
+| `AudioPayloadResult` | 把语音源整理成火山能消费的 `url` 或 Base64 `data`。 |
+| `ASR` | 调用火山引擎，返回文本、request id、logid、耗时和原始响应。 |
+| `VoiceInjectionPlan` | 区分 `memory_text`、`llm_text`、`raw_text`、`unclear` 和 diagnostics。 |
+| `ProviderRequest` | 在 LLM 请求阶段兜底清理音频残留，确保主 LLM 收到干净文本。 |
+
+### 成功路径不阻断 agent
+
+成功识别并注入后，插件不会把事件简单 `stop_event()` 掉。正确行为是让后续 LLM / agent 继续工作：
+
+```text
+语音识别成功
+  -> 替换消息链为 Plain(memory_text)
+  -> 构造或净化 ProviderRequest
+  -> event.should_call_llm(True)
+  -> 交还给 AstrBot 后续流程
+```
+
+只有这些路径才会阻断原事件继续扩散：
+
+| 路径 | 为什么阻断 |
+| :--- | :--- |
+| 鉴权未配置 | 避免旧 Record 继续进入官方 agent 并报错。 |
+| ASR / ffmpeg 明确失败 | 避免无法处理的语音继续污染流程。 |
+| `reply_transcription = true` | 用户选择了直接回复转写文本的调试模式。 |
+| 私聊 / 群聊触发范围不满足 | 插件按配置忽略该语音。 |
+
+### 记忆文本与 LLM 文本分离
+
+`VoiceInjectionPlan` 会生成两类文本：
+
+| 字段 | 用途 |
+| :--- | :--- |
+| `memory_text` | 写入消息链、`message_str` 和长期记忆的干净文本。 |
+| `llm_text` | 给主 LLM 的文本，可包含语音提示词和情绪辅助。 |
+
+这样 LivingMemory 看到的是：
+
+```text
+用户：你先别急着改，我怕又把能跑的地方弄坏了。
+```
+
+而不是：
+
+```text
+请根据用户语音转文字内容回复，尽量使用语音回复，不要讨论插件功能……
+```
+
+这条边界是为了保护长期记忆的质量。
+
+---
+
+## 兼容设计
+
+### 为什么推荐 Base64
+
+火山 ASR 支持 URL 提交，但 QQ 语音 URL 常常不是公网稳定资源。NapCat 返回的 URL 可能是临时内网地址、raw silk 资源，或必须通过适配器上下文才能访问。
+
+所以插件默认推荐：
+
+```text
+submit_mode = base64
+```
+
+在 `url` 模式下，插件也只会直传明确支持的 HTTP(S) 音频：
+
+```text
+.wav / .mp3 / .ogg / .opus
+```
+
+`.amr`、`.silk` 等 QQ 常见格式会回落到下载、转码和 Base64 提交。
+
+可以把策略写成：
+
+$$
+m_{\mathrm{submit}} =
+\begin{cases}
+\mathrm{url}, & \operatorname{ext}(u) \in \{\mathrm{wav}, \mathrm{mp3}, \mathrm{ogg}, \mathrm{opus}\} \land \operatorname{reachable}(u) \\
+\mathrm{base64}, & \text{otherwise}
+\end{cases}
+$$
+
+### 为什么要清理 Record
+
+一次语音事件可抽象为：
+
+$$
+E = (M, O, R, X)
+$$
+
+其中：
+
+| 符号 | 含义 |
+| :--- | :--- |
+| $M$ | AstrBot 事件上的消息链。 |
+| $O$ | `message_obj`、`raw_message` 等适配器对象。 |
+| $R$ | 可被识别为语音的 `Record` 或 OneBot `record` 片段。 |
+| $X$ | extras、run context、ProviderRequest、缓存字段。 |
+
+插件目标不是只求：
+
+$$
+f_{\mathrm{asr}}(R) \rightarrow T
+$$
+
+而是构造状态变换：
+
+$$
+\Phi(E) \rightarrow E'
+$$
+
+使得：
+
+1. $E'$ 的主消息语义等价于语音转写文本。
+2. $E'$ 不再携带会被后续媒体扫描误读的旧 `Record`。
+3. 后续 LLM、TTS、记忆插件仍按普通文本消息工作。
+4. 诊断信息保留，方便排查。
+
+残留风险可以写成：
+
+$$
+P_{\mathrm{fail}}
+= \mathbb{P}(R \in M') + \mathbb{P}(R \in O') + \mathbb{P}(R \in X')
+$$
+
+所以插件分别处理消息链、适配器对象、ProviderRequest、extras 和 run context，而不是只改一次 `message_str`。
+
+### ProviderRequest 必须原地净化
+
+AstrBot 内部的 `ProviderRequest` 是活对象，可能带有 `model_dump_for_context()` 等方法。旧式处理如果把它转换成普通 dict，就可能触发：
+
+```text
+'dict' object has no attribute 'model_dump_for_context'
+```
+
+当前策略是“原地净化”，不是“序列化后替换”。插件会识别常见别名：
+
+```text
+provider_request
+request
+req
+llm_request
+```
+
+并清理其中的音频残留字段，例如：
+
+```text
+audio_urls
+files
+contexts
+extra_user_content_parts
+messages
+cached_content
+cached_messages
+history
+input_messages
+conversation
+session
+```
+
+普通 URL、普通路径、普通 extras 不会被误删。
+
+### 官方 preprocess_stage 的边界
+
+AstrBot 官方 `preprocess_stage` 发生在插件 handler 之前。它如果先尝试处理 `Record(file="xxx.amr")`，可能报：
+
+```text
+[preprocess_stage.stage:81]: Voice processing failed: not a valid file: xxx.amr
+```
+
+这类 warning 不一定代表本插件失败。插件能做的是在自己的 handler 和 agent 前后尽量防止旧 `Record` 继续进入 `agent_sub_stages`。插件不能通过公开插件 API 保证关闭官方前置预处理。
+
+---
+
+## 配置指南
+
+### 常用场景
+
+| 场景 | 推荐配置 |
+| :--- | :--- |
+| 正常使用 | `inject_as_user_input=true`，`reply_transcription=false`，`submit_mode=base64`。 |
+| 调试 ASR | 临时设 `reply_transcription=true`，确认转写结果。 |
+| 群聊降噪 | `only_when_at_or_wake=true`。 |
+| 不想额外调用 LLM | 保持 `enable_emotion_analysis=false`。 |
+| 希望回复更细腻 | 打开 `enable_emotion_analysis=true`，并保持 `emotion_fail_open=true`。 |
+| 非 Linux x86_64 | `prefer_bundled_ffmpeg=false`，配置系统 `ffmpeg_path`。 |
+
+<details>
+<summary>展开：完整配置项</summary>
+
+### 鉴权与接口
+
+**`api_key`**
+类型：`string`
+默认值：空
+新版火山控制台 API Key。填写后优先使用 `X-Api-Key` 鉴权。
+
+**`app_key`**
+类型：`string`
+默认值：空
+旧版火山控制台 App Key。仅在未填写 `api_key` 时使用。
+
+**`access_key`**
+类型：`string`
+默认值：空
+旧版火山控制台 Access Key，需要和 `app_key` 一起填写。
+
+**`resource_id`**
+类型：`string`
+默认值：`volc.bigasr.auc_turbo`
+火山引擎豆包语音大模型录音文件极速版资源 ID。
+
+**`endpoint`**
+类型：`string`
+默认值：火山 flash recognize API
+火山 ASR 请求地址。通常不用修改，只有火山接口变更或私有代理场景才需要调整。
+
+**`uid`**
+类型：`string`
+默认值：自动
+用户标识。留空时自动取 `api_key`、`app_key` 或 `astrbot`。
+
+### 音频提交与转码
+
+**`submit_mode`**
+类型：`string`
+默认值：`base64`
+推荐保持 `base64`。插件会由 AstrBot 侧读取、下载或转码音频，再提交给火山 ASR，最适合 OneBot、NapCat 和 Docker。
+
+**`max_audio_mb`**
+类型：`integer`
+默认值：`20`
+Base64 上传的音频大小上限。一般语音消息保持 20MB 以内即可。
+
+**`timeout_seconds`**
+类型：`integer`
+默认值：`60`
+火山 ASR 请求超时时间。
+
+**`enable_transcode`**
+类型：`boolean`
+默认值：`true`
+对 AMR、SILK、M4A、AAC、FLAC、WEBM 等格式自动转码。
+
+**`prefer_bundled_ffmpeg`**
+类型：`boolean`
+默认值：`true`
+优先使用 Release 包内置 ffmpeg。Linux x86_64 / amd64 环境建议保持开启。
+
+**`ffmpeg_path`**
+类型：`string`
+默认值：`auto`
+可填写系统 ffmpeg 绝对路径。非 Linux x86_64 环境建议显式配置。
+
+**`transcode_output_format`**
+类型：`string`
+默认值：`wav`
+转码输出格式，可选 `wav`、`mp3`、`ogg`。
+
+**`transcode_sample_rate`**
+类型：`integer`
+默认值：`16000`
+转码采样率。语音识别场景通常保持 16000。
+
+**`transcode_channels`**
+类型：`integer`
+默认值：`1`
+转码声道数。语音识别场景通常保持单声道。
+
+### ASR 参数
+
+**`enable_itn`**
+类型：`boolean`
+默认值：`true`
+开启数字规整，让识别结果更接近自然文本。
+
+**`enable_punc`**
+类型：`boolean`
+默认值：`true`
+开启自动标点。
+
+**`enable_ddc`**
+类型：`boolean`
+默认值：`true`
+开启顺滑处理。
+
+**`enable_speaker_info`**
+类型：`boolean`
+默认值：`false`
+是否请求说话人信息。普通 QQ 单人语音通常不需要。
+
+### 事件触发范围
+
+**`auto_recognize`**
+类型：`boolean`
+默认值：`true`
+自动识别语音消息。
+
+**`enable_private`**
+类型：`boolean`
+默认值：`true`
+私聊启用。
+
+**`enable_group`**
+类型：`boolean`
+默认值：`true`
+群聊启用。
+
+**`only_when_at_or_wake`**
+类型：`boolean`
+默认值：`false`
+群聊中仅在被 @ 或被唤醒时识别，用于降低群聊噪声。
+
+**`ignore_self`**
+类型：`boolean`
+默认值：`true`
+忽略机器人自己发送的消息，避免自触发。
+
+### 注入与回复行为
+
+**`inject_as_user_input`**
+类型：`boolean`
+默认值：`true`
+推荐开启。把转写文本注入为用户输入，让后续 LLM、TTS、记忆和上下文插件继续正常工作。
+
+**`voice_prompt_template`**
+类型：`string`
+默认值：内置模板
+给主 LLM 的语音输入提示模板。消息链和长期记忆仍只写入干净转写文本。
+
+**`inject_on_unclear_voice`**
+类型：`boolean`
+默认值：`true`
+没听清时也注入自然提示，让主 LLM 用自然语气请用户重说。
+
+**`unclear_voice_prompt`**
+类型：`string`
+默认值：内置模板
+没听清时给主 LLM 的提示模板。
+
+**`reply_transcription`**
+类型：`boolean`
+默认值：`false`
+调试或旧行为。开启后插件会直接回复转写文本，而不是注入为用户输入。
+
+**`reply_template`**
+类型：`string`
+默认值：`语音转文字：{text}`
+直接回复模式下使用的文本模板。
+
+**`stop_event_after_recognition`**
+类型：`boolean`
+默认值：`true`
+直接回复模式下阻止后续传播，避免旧 `Record` 继续进入 agent。
+
+**`send_empty_result_message`**
+类型：`boolean`
+默认值：`true`
+无识别内容时是否发送提示。
+
+### 情绪判断
+
+**`enable_emotion_analysis`**
+类型：`boolean`
+默认值：`false`
+默认关闭。开启后会在语音转写成功后额外调用一次 LLM 做情绪判断。
+
+**`emotion_model_id`**
+类型：`string`
+默认值：空
+WebUI 选择模型。留空时使用当前会话主 LLM。
+
+**`emotion_context_turns`**
+类型：`integer`
+默认值：`4`
+情绪判断参考上下文轮数。
+
+**`emotion_max_respect_weight_percent`**
+类型：`integer`
+默认值：`60`
+主 LLM 最大参考权重。它限制情绪判断最多影响回复语气到什么程度。
+
+**`emotion_timeout_seconds`**
+类型：`integer`
+默认值：`20`
+情绪判断 LLM 调用超时时间。
+
+**`emotion_fail_open`**
+类型：`boolean`
+默认值：`true`
+情绪判断失败时继续普通语音流程，不中断 ASR 主链路。
+
+**`emotion_prompt_template`**
+类型：`string`
+默认值：内置 JSON 模板
+高级配置。必须要求情绪 LLM 只输出 JSON，否则解析失败时会跳过情绪增强。
+
+### 调试与提示
+
+**`notify_config_error`**
+类型：`boolean`
+默认值：`true`
+鉴权未配置时在聊天中提示。
+
+**`notify_asr_error`**
+类型：`boolean`
+默认值：`true`
+识别失败时在聊天中提示。
+
+**`show_logid`**
+类型：`boolean`
+默认值：`false`
+排障时显示火山 `logid`，便于和火山控制台或服务端日志对应。
+
+</details>
+
+<details>
+<summary>展开：提示词模板与占位符</summary>
+
+常见占位符：
+
+| 占位符 | 含义 |
+| :--- | :--- |
+| `{text}` | ASR 转写文本。 |
+| `{logid}` | 火山服务端排障 ID。 |
+| `{request_id}` | 本次请求 ID。 |
+| `{duration_ms}` | ASR 耗时。 |
+
+推荐思路：
+
+```text
+用户刚刚发送了一条语音，以下是语音转文字内容：
+{text}
+
+请把它当作用户刚刚说的话来回复。
+不要讨论“语音转文字插件”本身。
+如果系统配置了 TTS，可以自然地倾向于语音风格回复。
+```
+
+情绪判断提示词必须要求只输出 JSON。不要让情绪 LLM 输出自然语言解释，否则解析失败时会被跳过。
+
+</details>
+
+---
+
+## 命令与状态
+
+| 命令 | 用途 |
+| :--- | :--- |
+| `/volc_asr_status` | 查看插件版本、仓库 URL、鉴权、提交模式、转码、ffmpeg 状态和官方预处理提示。 |
+| `/火山语音状态` | 中文别名，等价于 `/volc_asr_status`。 |
+
+状态检查适合确认：
+
+1. 当前插件版本是否为最新。
+2. `metadata.yaml` 中的仓库 URL 是否正确。
+3. 是否已配置火山鉴权。
+4. 当前提交模式是 `base64` 还是 `url`。
+5. 自动转码是否开启。
+6. 内置或系统 `ffmpeg` 是否可启动。
+7. 是否正在遇到 AstrBot 官方 `preprocess_stage` 前置 warning。
+
+---
+
+## 常见问题与排障
+
+### 上传 zip 后提示 `Not a directory: CHANGELOG.md`
+
+原因通常是安装了旧的平铺 zip，或自己重新压缩时把文件直接放在 zip 顶层。
+
+正确结构：
+
+```text
+astrbot_plugin_volcengine_asr/
+├── metadata.yaml
+├── main.py
+└── ...
+```
+
+错误结构：
 
 ```text
 CHANGELOG.md
@@ -289,570 +1255,34 @@ main.py
 metadata.yaml
 ```
 
-AstrBot v4.24.2 上传安装器会把 zip 的第一项当成外层目录处理。若第一项是 `CHANGELOG.md` 这类文件，就可能报 `[Errno 20] Not a directory: .../CHANGELOG.md`。
+解决办法：
 
-### 方式二：从 GitHub 仓库安装
+1. 删除 AstrBot 插件页中的失败项 `plugin_upload_*`。
+2. 下载最新 Release 附件 `astrbot_plugin_volcengine_asr.zip`。
+3. 不要重新压缩，不要上传 GitHub Source code zip。
+4. 重新从文件安装。
 
-在 AstrBot WebUI 里使用仓库地址安装：
+### 上传 zip 后找不到 `metadata.yaml`
 
-```text
-https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr
-```
+请确认你上传的是 Release 页面里的 `astrbot_plugin_volcengine_asr.zip`，不是 GitHub 绿色 Code 按钮生成的 Source code zip。
 
-如果 WebUI 输入框会自动补全 `.git`，也可以使用：
-
-```text
-https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr.git
-```
-
-不要省略协议头。也就是说，不要填写下面这种地址：
+Source code zip 外层目录名通常类似：
 
 ```text
-//github.com/Ayleovelle/astrbot_plugin_volcengine_asr.git
+astrbot_plugin_volcengine_asr-main/
 ```
 
-少了 `https:` 会让 AstrBot 把它当成不完整链接处理，可能导致下载、依赖安装或插件加载路径异常。
+它可能不包含内置 `ffmpeg`，也可能与 AstrBot 上传安装器预期结构不一致。
 
-仓库根目录提供了 `metadata.yaml`、`main.py`、`_conf_schema.json` 和 `requirements.txt`，可以被 AstrBot 直接识别。
-
-需要注意：仓库安装不等同于 Release zip 安装。仓库根目录本身不会带 Release zip 中的内置 `bin/linux-x86_64/ffmpeg`，所以会依赖 `imageio-ffmpeg` 或系统 PATH 中的 `ffmpeg` 作为兜底。如果你的环境禁止安装 Python 依赖，或者 `imageio-ffmpeg` 无法下载二进制，请改用 Release zip 或手动配置系统 `ffmpeg`。
-
-### 方式三：手动放入插件目录
-
-将插件目录放入 AstrBot 的 `data/plugins/` 下，确保目录中至少包含：
-
-```text
-astrbot_plugin_volcengine_asr/
-├── metadata.yaml
-├── main.py
-├── _conf_schema.json
-├── requirements.txt
-└── bin/linux-x86_64/ffmpeg
-```
-
-如果你不是 Linux x86_64 / amd64 环境，可以关闭 `prefer_bundled_ffmpeg`，并把 `ffmpeg_path` 改成系统中的 `ffmpeg` 绝对路径。
-
-## 火山引擎准备
-
-使用前需要在火山引擎控制台准备豆包语音识别能力：
-
-1. 开通豆包语音「大模型录音文件极速版识别」。
-2. 确认资源 ID 为 `volc.bigasr.auc_turbo`。
-3. 新版控制台优先获取并填写 `api_key`。
-4. 旧版控制台可以继续使用 `app_key + access_key`。
-5. 确认账号配额、权限和计费状态正常。
-
-鉴权优先级：
-
-| 情况 | 插件行为 |
-| :--- | :--- |
-| 填写了 `api_key` | 优先使用 `X-Api-Key` 鉴权。 |
-| 未填写 `api_key`，填写了 `app_key + access_key` | 使用旧版鉴权字段。 |
-| 都未填写 | 识别不会正常工作；若 `notify_config_error=true`，会在聊天中提示配置错误。 |
-
-默认接口地址：
-
-```text
-https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash
-```
-
-一般不需要修改 `endpoint`。只有在火山引擎官方文档明确要求更换接口，或你有代理网关时，才建议改它。
-
-## 推荐配置
-
-### OneBot v11 + NapCat + Linux Docker 推荐值
-
-大多数用户只需要改这些：
-
-| 配置项 | 推荐值 | 原因 |
-| :--- | :--- | :--- |
-| `api_key` | 你的火山引擎 API Key | 新版控制台优先使用这一项。 |
-| `submit_mode` | `base64` | QQ 语音 URL 经常是内网、临时或需要本机访问，Base64 更稳定。 |
-| `enable_transcode` | `true` | 自动处理 AMR、SILK、M4A 等格式。 |
-| `prefer_bundled_ffmpeg` | `true` | Release 包内置 Linux x86_64 `ffmpeg`。 |
-| `inject_as_user_input` | `true` | 让语音像用户文字输入一样进入 LLM。 |
-| `reply_transcription` | `false` | 不直接回复“语音转文字：xxx”，保持自然对话。 |
-| `inject_on_unclear_voice` | `true` | 没听清时让模型自然请用户重说。 |
-
-### 想直接看转写结果的调试配置
-
-如果你正在排查 ASR 是否成功，可以临时改成：
-
-```text
-reply_transcription = true
-show_logid = true
-```
-
-这样 Bot 会直接回复转写结果，并在需要时附带火山引擎 `logid`。排查结束后，建议改回：
-
-```text
-reply_transcription = false
-show_logid = false
-```
-
-### 群聊较吵时的配置建议
-
-如果群里语音很多，但你只希望 Bot 在被叫到时识别，可以开启：
-
-```text
-only_when_at_or_wake = true
-```
-
-这样可以减少无关语音触发，也能降低调用火山接口的成本。
-
-## 情绪判断快速配置
-
-2.0.0 新增的情绪判断模块默认关闭。如果你希望主 LLM 在回复语音消息时更敏感地理解用户当前状态，可以按下面方式开启：
-
-```text
-enable_emotion_analysis = true
-emotion_model_id = ""
-emotion_context_turns = 4
-emotion_max_respect_weight_percent = 60
-emotion_fail_open = true
-```
-
-说明：
-
-- `emotion_model_id` 留空时，插件会尝试使用当前会话的主 LLM 作为情绪判断 LLM。
-- `emotion_model_id` 在 AstrBot WebUI 中支持点击选择已配置模型；留空时使用当前会话默认模型。
-- `emotion_max_respect_weight_percent` 建议保持在 `30-70`。它不是情绪置信度，而是“主 LLM 最多应该在多大程度上参考情绪判断”的上限。
-- `emotion_fail_open=true` 时，即使情绪判断模型超时、报错或输出 JSON 不合法，语音转写仍会按原流程进入主 LLM。
-
-> [!WARNING]
-> 情绪判断会额外请求一次 LLM，因此会增加 token 消耗、响应延迟和上下文暴露范围。它只用于调整回复语气，不是心理诊断，也不应该覆盖用户明确表达的请求。
-
-## 情绪判断模块
-
-情绪判断模块是 2.0.0 的核心更新。它的目标不是“判断用户真实心理状态”，而是在用户发语音时，给主 LLM 一个结构化、带权重、可忽略的语气参考。
-
-### 模块解决什么问题
-
-语音消息比文字多了一层表达语境：用户可能是在抱怨、撒娇、焦虑、兴奋、困惑，也可能只是普通陈述。ASR 只能给出文字，不会直接告诉主 LLM“这个语音听起来该被温柔对待还是正常回答”。
-
-本模块在 ASR 得到纯转写文本后，额外调用一次情绪判断 LLM，让它输出结构化 JSON。插件随后用本地公式计算 `respect_weight`，再把结果追加到主 LLM 的提示词里。主 LLM 可以根据该权重调整语气、安抚强度和共情程度，但不能把情绪判断当成事实。
-
-### 完整工作流
-
-```text
-1. 用户发送 QQ 语音。
-2. 插件通过火山引擎 ASR 得到纯转写文本。
-3. 如果 enable_emotion_analysis=false：
-   - 直接走原来的 LivingMemory 友好注入流程。
-4. 如果 enable_emotion_analysis=true：
-   - 插件构造情绪判断 prompt。
-   - 情绪判断 LLM 读取当前语音转写和可用上下文。
-   - 情绪判断 LLM 只允许输出 JSON。
-   - 插件解析 JSON，清洗情绪标签和权重。
-   - 插件用 Shannon entropy、LLM 置信度、文本证据强度计算 respect_weight。
-   - 插件把情绪结果作为辅助块追加到主 LLM prompt。
-5. 消息事件阶段仍然只把纯转写文本写入 event.message_str。
-6. LivingMemory 仍然只读取和存储干净文本。
-7. 主 LLM 最终看到：语音提示词 + 情绪辅助信息 + 原本上下文。
-8. 主 LLM 按参考权重调整语气并回复。
-```
-
-关键点：情绪判断结果不会写入 `event.message_str`，也不会写入 `message_obj.message_str`。LivingMemory 看到的仍然是用户原话的纯转写文本。
-
-### 情绪判断 LLM 输出格式
-
-情绪判断 LLM 必须输出 JSON，例如：
-
-```json
-{
-  "label": "anxious",
-  "emotion_weights": {
-    "anxious": 0.62,
-    "sad": 0.18,
-    "neutral": 0.12
-  },
-  "confidence": 0.71,
-  "valence": -0.45,
-  "arousal": 0.68,
-  "voice_text_support": 0.75,
-  "context_support": 0.40,
-  "reason": "用户表达了担心和不确定，但没有明显愤怒。"
-}
-```
-
-字段解释：
-
-| 字段 | 含义 |
-| :--- | :--- |
-| `label` | 主情绪标签。当前支持 `neutral`、`happy`、`sad`、`angry`、`anxious`、`frustrated`、`excited`、`confused`、`tired`。 |
-| `emotion_weights` | 情绪分布。插件会裁剪到 `[0,1]`，总和超过 1 时会重新归一化。 |
-| `confidence` | 情绪判断 LLM 对自己判断的置信度，只是输入信号之一，不会被完全信任。 |
-| `valence` | 效价，范围 `[-1,1]`。负值偏不愉快，正值偏愉快。 |
-| `arousal` | 唤醒度，范围 `[0,1]`。越高表示情绪越激活、越强烈。 |
-| `voice_text_support` | 当前语音转写文本本身对该判断的支持度。 |
-| `context_support` | 上下文对该判断的支持度。 |
-| `reason` | 一句话短解释，不需要链式思考。 |
-
-如果模型输出不是合法 JSON，或字段无法解析，插件会跳过情绪增强，并继续正常语音转写流程。
-
-### 理论依据
-
-本模块采用“维度情绪 + 分类情绪 + 不确定性校准 + 语境评价”的混合方案。需要先说明边界：插件里的 `respect_weight` 是工程化融合公式，不是某篇心理学论文或机器学习论文的原样复现；它把下列可检索文献中的思想压缩成一个可控、可解释、默认保守的提示词权重。
-
-1. **Russell 环状情绪模型**
-   Russell 的 Circumplex Model of Affect 将情绪放在二维空间中理解：`valence` 表示愉快/不愉快，`arousal` 表示激活/平静。这样比只给一个“开心/难过”标签更细，因为“愤怒”和“焦虑”都可能是负效价高唤醒，而“疲惫”更接近负效价低唤醒。该思路来自 Russell 对情绪词空间的二维建模，后续也被 Posner、Russell 与 Peterson 用于整合情感神经科学、认知发展和精神病理学研究。
-
-2. **分类情绪标签**
-   主 LLM 实际调整回复时仍需要可读标签，所以插件保留 `anxious`、`sad`、`happy` 等离散情绪。标签负责“怎么说”，效价/唤醒度负责“强度和方向”。这里借用了基础情绪研究中“离散标签有助于表达和识别”的工程价值，但不等同于完整采纳某一种基础情绪理论。
-
-3. **Shannon entropy 不确定性**
-   如果情绪分布很集中，例如 `anxious=0.90, neutral=0.10`，说明分类结果更确定；如果分布很平，例如 `anxious=0.34, sad=0.33, neutral=0.33`，说明模型其实不确定。插件用 Shannon 在信息论中提出的 entropy 形式，把情绪分布的不确定性转成 `certainty`。
-
-4. **置信度不直接等于参考权重**
-   LLM 自报的 `confidence` 可能过高或不稳定，所以插件不会直接把它当成主 LLM 的服从程度，而是把它和分类确定性、文本证据强度一起计算。这个设计参考了现代神经网络校准研究中的基本结论：模型给出的概率或置信度不必然等于真实正确率，实际系统中需要额外校准或约束。
-
-5. **语境证据加权**
-   情绪不能只看一个词，也不能完全靠上下文脑补。认知评价理论强调情绪与个体对事件、责任、确定性、控制感等语境因素的评价有关。因此插件默认更重视当前语音文本，较轻参考上下文：`voice_text_support` 权重 0.7，`context_support` 权重 0.3。
-
-### 计算过程
-
-插件先把情绪权重清洗成概率分布 `p`，再计算分类确定性：
-
-```text
-H(p) = -Σ p_i log(p_i)
-certainty = 1 - H(p) / log(N)
-```
-
-解释：
-
-- `H(p)` 是 Shannon entropy。
-- `N` 是非零情绪标签数量。
-- `certainty` 越接近 1，说明情绪分布越集中。
-- `certainty` 越接近 0，说明模型在多个情绪之间摇摆。
-
-然后计算证据强度：
-
-```text
-length_factor = min(1, log(1 + transcript_chars) / log(81))
-evidence = length_factor * (0.7 * voice_text_support + 0.3 * context_support)
-```
-
-解释：
-
-- 很短的语音文本信息量不足，例如“嗯”“啊？”“好吧”，即使模型给出高置信，也不应该让主 LLM 过度反应。
-- `length_factor` 会压低短文本的证据强度。
-- 当前语音文本比上下文更重要，所以权重是 0.7 / 0.3。
-
-最后计算主 LLM 参考权重：
-
-```text
-respect_weight = clamp(
-  max_respect_weight * (0.50 * confidence + 0.30 * certainty + 0.20 * evidence),
-  0,
-  max_respect_weight
-)
-```
-
-默认：
-
-```text
-max_respect_weight = 0.60
-```
-
-额外保护：
-
-- 如果转写文本少于 12 个字符，`respect_weight` 最高压到 `0.25`。
-- 如果语音未听清，不进行情绪判断。
-- 如果 JSON 解析失败，不进行情绪增强。
-- 如果情绪判断 LLM 调用失败，默认 fail-open，继续普通 ASR 流程。
-
-### 权重公式扩展接口
-
-`2.1.8` 起，情绪参考权重的本地公式被封装为 `EmotionWeightingPolicy`：
-
-- `EmotionWeightingInput` 保存公式输入：转写长度、置信度、情绪分布、语音文本证据、上下文证据、最大参考权重。
-- `DefaultEmotionWeightingPolicy` 保留旧公式，继续使用置信度、情绪分布 entropy certainty、文本/上下文证据和短文本上限。
-- `_compute_emotion_respect_weight()` 仍保留为兼容包装器，已有测试或外部导入不需要改。
-- 分支开发可以替换插件实例上的 `self.emotion_weighting_policy`，只改情绪权重策略，不碰 ASR、ffmpeg、消息清理和 ProviderRequest 注入主链路。
-
-### 可检索参考文献
-
-下面这些文献都可以在 Google Scholar 中按标题检索到：
-
-| 作用 | 文献 |
-| :--- | :--- |
-| `valence/arousal` 二维情绪空间 | Russell, J. A. (1980). [A circumplex model of affect](https://doi.org/10.1037/h0077714). *Journal of Personality and Social Psychology*, 39(6), 1161-1178. |
-| 环状情绪模型的神经科学与发展心理学综述 | Posner, J., Russell, J. A., & Peterson, B. S. (2005). [The circumplex model of affect: An integrative approach to affective neuroscience, cognitive development, and psychopathology](https://doi.org/10.1017/S0954579405050340). *Development and Psychopathology*, 17(3), 715-734. |
-| 离散情绪标签的基础情绪理论来源 | Ekman, P. (1992). [An argument for basic emotions](https://doi.org/10.1080/02699939208411068). *Cognition and Emotion*, 6(3-4), 169-200. |
-| entropy / 不确定性度量 | Shannon, C. E. (1948). [A mathematical theory of communication](https://doi.org/10.1002/j.1538-7305.1948.tb01338.x). *The Bell System Technical Journal*, 27(3), 379-423. |
-| 语境评价与情绪差异 | Smith, C. A., & Ellsworth, P. C. (1985). [Patterns of cognitive appraisal in emotion](https://doi.org/10.1037/0022-3514.48.4.813). *Journal of Personality and Social Psychology*, 48(4), 813-838. |
-| 评价理论的多层顺序检查模型 | Scherer, K. R. (2001). [Appraisal considered as a process of multilevel sequential checking](https://doi.org/10.1093/oso/9780195130072.003.0005). In *Appraisal Processes in Emotion: Theory, Methods, Research* (pp. 92-120). Oxford University Press. |
-| 现代神经网络置信度校准 | Guo, C., Pleiss, G., Sun, Y., & Weinberger, K. Q. (2017). [On calibration of modern neural networks](https://arxiv.org/abs/1706.04599). *Proceedings of ICML 2017*. |
-
-### 主 LLM 最终看到什么
-
-主 LLM 不会收到情绪判断 LLM 的原始长输出，而是收到插件整理后的辅助块：
-
-```text
-[情绪判断辅助信息]
-- 推测情绪：anxious
-- 情绪分布：anxious=0.62, sad=0.18, neutral=0.12
-- 置信度：0.71
-- 效价 valence：-0.45
-- 唤醒度 arousal：0.68
-- 建议参考权重：0.42
-- 简短依据：用户表达了担心和不确定，但没有明显愤怒。
-
-请只按该权重调整语气、共情程度和安抚强度。不要把该判断当作事实，不要替用户断言情绪，不要覆盖用户明确表达的请求。
-```
-
-这里最重要的是最后一句限制：情绪结果只是语气参考，不是事实，也不是命令。用户明确提出的需求永远优先。
-
-### 模型选择与回退
-
-`emotion_model_id` 是预留的模型选择接口：
-
-- 留空：使用当前会话默认模型。
-- 在 AstrBot WebUI 中点击选择已配置模型：尝试使用指定 AstrBot 模型。
-- 当前 AstrBot 环境不支持指定模型或 LLM 调用失败：按 `emotion_fail_open` 决定是否跳过。
-
-推荐做法：
-
-- 如果你追求稳定，先留空，用主 LLM 判断。
-- 如果你希望降低成本，后续可以选择更便宜、更快的小模型做情绪判断。
-- 如果你不希望额外消耗 token，保持 `enable_emotion_analysis=false`。
-
-### 与 LivingMemory 的关系
-
-情绪判断模块只影响主 LLM prompt，不影响 LivingMemory 存储内容。
-
-| 阶段 | 内容 |
-| :--- | :--- |
-| 消息事件阶段 | 只写入纯转写文本。 |
-| LivingMemory 读取阶段 | 只看到用户语音的干净转写。 |
-| LLM 请求阶段 | 才追加语音提示词和情绪辅助信息。 |
-| 长期记忆结果 | 不会保存 `anxious=0.62`、`respect_weight=0.42` 这类分析文本。 |
-
-这样做是为了避免长期记忆被模型分析、插件提示词、情绪标签污染。
-
-
-> 本插件使用 AstrBot 原生插件配置页。下面按功能分组解释每一个配置项。
-
-<details>
-<summary>点击查看完整配置项详解</summary>
-
-### 1. 鉴权与接口
-
-| 配置项 | 类型 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `api_key` | string | 空 | 新版控制台 API Key。填写后优先使用 `X-Api-Key` 鉴权。 |
-| `app_key` | string | 空 | 旧版控制台 App Key。仅在未填写 `api_key` 时使用。 |
-| `access_key` | string | 空 | 旧版控制台 Access Key。需要和 `app_key` 一起填写。 |
-| `resource_id` | string | `volc.bigasr.auc_turbo` | 火山引擎大模型录音文件极速版资源 ID。 |
-| `endpoint` | string | `https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash` | 火山官方识别接口地址。 |
-| `uid` | string | 空 | 用户标识。留空时自动使用 `api_key`、`app_key` 或 `astrbot`。 |
-
-填写建议：
-
-- 新用户优先只填 `api_key`。
-- 旧版控制台用户再考虑 `app_key + access_key`。
-- 不要随意修改 `resource_id` 和 `endpoint`，除非你明确知道火山侧要求变更。
-
-### 2. 音频提交与转码
-
-| 配置项 | 类型 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `submit_mode` | string | `base64` | 音频提交方式，可选 `base64` / `url`。 |
-| `max_audio_mb` | int | `20` | 单条语音大小上限。Base64 上传建议保持 20MB 以内。 |
-| `timeout_seconds` | int | `60` | 下载、转码和接口请求超时时间。 |
-| `enable_transcode` | bool | `true` | 遇到不支持格式时自动调用 `ffmpeg` 转码。 |
-| `prefer_bundled_ffmpeg` | bool | `true` | 优先使用 Release 包内置 `ffmpeg`。 |
-| `ffmpeg_path` | string | `auto` | `ffmpeg` 可执行文件路径。可填写绝对路径。 |
-| `transcode_output_format` | string | `wav` | 转码输出格式，可选 `wav` / `mp3` / `ogg`。 |
-| `transcode_sample_rate` | int | `16000` | 转码采样率。语音识别推荐 16000。 |
-| `transcode_channels` | int | `1` | 转码声道数。语音识别推荐单声道。 |
-
-`ffmpeg` 查找顺序：
-
-1. 当 `prefer_bundled_ffmpeg=true` 且 `ffmpeg_path=auto` 或 `ffmpeg` 时，优先尝试 Release zip 内置 `bin/linux-x86_64/ffmpeg`。
-2. 如果内置文件不能通过 `ffmpeg -version` 启动探测，会自动尝试 `imageio-ffmpeg` 提供的可执行文件。
-3. 如果 `imageio-ffmpeg` 也不可启动，最后尝试系统 PATH 中的 `ffmpeg`。
-4. 如果你在 `ffmpeg_path` 中填写绝对路径，则只探测并使用该路径。
-
-`/volc_asr_status` 会显示 `ffmpeg来源` 和 `ffmpeg状态`。如果状态为不可用，插件不会在加载阶段崩溃，但遇到 AMR / SILK / M4A 等需要转码的语音时会给出明确错误，并提示你安装系统 `ffmpeg` 或配置 `ffmpeg_path`。
-
-关于 `submit_mode`：
-
-- `base64`：推荐。AstrBot 所在机器先读取或下载音频，再把内容提交给火山引擎。
-- `url`：只有当火山引擎服务器可以公网访问该语音 URL 时才适合。大多数 OneBot / NapCat 的 QQ 语音 URL 不满足这个条件。
-
-### 3. 识别参数
-
-| 配置项 | 类型 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `enable_itn` | bool | `true` | 启用数字规整，例如把口语数字规整成更适合阅读的文本。 |
-| `enable_punc` | bool | `true` | 启用自动标点。 |
-| `enable_ddc` | bool | `true` | 启用顺滑处理。 |
-| `enable_speaker_info` | bool | `false` | 启用说话人信息。普通 QQ 短语音通常不需要。 |
-
-建议保持默认。QQ 短语音大多数是单人短句，开启说话人信息通常收益不大。
-
-### 4. 注入与回复行为
-
-| 配置项 | 类型 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `auto_recognize` | bool | `true` | 自动识别语音消息总开关。 |
-| `inject_as_user_input` | bool | `true` | 将识别结果注入为用户输入，继续交给 LLM。 |
-| `voice_prompt_template` | string | 默认语音回复模板 | LLM 请求阶段使用的语音提示词模板。 |
-| `inject_on_unclear_voice` | bool | `true` | 静音、杂音、空结果时也注入“没听清”提示。 |
-| `unclear_voice_prompt` | string | 默认没听清模板 | 仅在 `inject_on_unclear_voice=true` 时生效。 |
-| `reply_transcription` | bool | `false` | 直接回复转写结果。主要用于调试或兼容旧行为。 |
-| `reply_template` | string | `语音转文字：{text}` | 直接回复模式下的回复模板。 |
-| `stop_event_after_recognition` | bool | `true` | 直接回复或报错后停止事件继续传递，避免后续插件重复处理。 |
-| `send_empty_result_message` | bool | `true` | 直接回复模式下，静音或空结果时发送提示。 |
-
-推荐组合：
-
-```text
-inject_as_user_input = true
-reply_transcription = false
-inject_on_unclear_voice = true
-```
-
-这组配置能让用户语音自然进入 LLM，同时让 LivingMemory 记录干净文本。
-
-### 5. 场景范围与触发控制
-
-| 配置项 | 类型 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `enable_private` | bool | `true` | 私聊启用。 |
-| `enable_group` | bool | `true` | 群聊启用。 |
-| `only_when_at_or_wake` | bool | `false` | 群聊中仅被 @ 或唤醒时识别。 |
-| `ignore_self` | bool | `true` | 忽略机器人自己发送的消息。 |
-
-群聊建议：
-
-- 小群或语音量少：可以保持 `only_when_at_or_wake=false`。
-- 大群或语音量多：建议开启 `only_when_at_or_wake=true`。
-
-### 6. 错误提示与排查
-
-| 配置项 | 类型 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `notify_config_error` | bool | `true` | 未配置鉴权时在聊天中提示。 |
-| `notify_asr_error` | bool | `true` | 识别失败时在聊天中提示。 |
-| `show_logid` | bool | `false` | 回复中显示火山引擎 `logid`，方便排查。 |
-
-排障时可以临时开启：
-
-```text
-show_logid = true
-notify_asr_error = true
-```
-
-复现后把日志或回复中的 `logid` 记录下来，再向火山引擎侧排查。
-
-</details>
-
-## 默认提示词与模板写法
-
-默认 `voice_prompt_template`：
-
-```text
-<text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，并且尽量使用语音回复，严禁讨论本插件的实际功能“转文字”的事实，回复时不要考虑括号内内容]
-```
-
-这个模板的目的不是告诉用户“我把语音转成了文字”，而是让 LLM 把语音内容当作用户原话处理，并在合适时倾向语音回复。
-
-### 支持的占位符
-
-| 占位符 | 说明 |
-| :--- | :--- |
-| `<text>` | 推荐写法，表示识别出的语音文本。 |
-| `{text}` | 等价写法，表示识别出的语音文本。 |
-| `{logid}` | 火山引擎接口返回的 logid。 |
-| `{request_id}` | 请求 ID。 |
-| `{duration_ms}` | 本次识别耗时，单位毫秒。 |
-
-如果你在自定义模板中需要字面量 `{` 或 `}`，请写成 `{{` 和 `}}`，避免被 Python 模板格式化解析。
-
-### 偏向文字回复的模板示例
-
-```text
-[用户发送了一条语音，以下是自动转写内容：<text>。请将其视为用户本人的输入，并自然回复。]
-```
-
-### 偏向语音回复的模板示例
-
-```text
-<text>[上面是用户刚刚说出的语音内容。请把它当作用户原话理解，结合上下文自然回复；如果当前系统支持语音输出，请优先使用语音风格进行回应。]
-```
-
-### 默认没听清提示词
-
-```text
-[用户刚刚发送了一条语音，但系统没有听清内容（可能是静音、杂音或识别失败）。请以没听清为由，自然地请用户再说一次或改用文字补充，不要直接说是系统错误。]
-```
-
-## LivingMemory 兼容机制
-
-从 `1.4.7` 开始，插件采用两阶段注入：
-
-1. 消息事件阶段：把语音识别结果写成纯转写文本。
-2. LLM 请求阶段：在 `on_llm_request(priority=-10)` 中，把 `req.prompt` 里的纯文本替换成语音提示词模板。
-
-这样可以同时满足两个目标：
-
-- `astrbot_plugin_livingmemory` 记录和召回的是干净的用户原话。
-- LLM 最终仍然收到“这是语音转写内容，请自然回复”的提示。
-
-如果旧版本直接把 `voice_prompt_template` 写进消息事件，长期记忆里就可能出现大量类似“请尽量使用语音回复”“不要讨论转文字事实”的模板内容。这个版本避免了这个问题。
-
-如果你在 LivingMemory 中仍看到大量提示词模板文字，请检查：
-
-- 插件版本是否为 `1.4.7` 或更高。
-- 是否确实安装了最新 Release zip。
-- 是否有其他插件在更早阶段改写了消息内容。
-- 日志中是否出现“已将语音识别结果注入为干净用户输入”和“已在 LLM 请求阶段应用语音提示词模板”。
-
-## 命令与状态检查
-
-| 命令 | 用途 |
-| :--- | :--- |
-| `/volc_asr_status` | 查看插件配置和运行状态。 |
-| `/火山语音状态` | 中文别名，等价于上一条。 |
-
-状态检查适合用于确认：
-
-- 当前插件版本和仓库 URL，确认 AstrBot 更新器能找到仓库。
-- 是否已配置鉴权。
-- 当前是否启用自动识别。
-- 当前提交模式是 `base64` 还是 `url`。
-- 是否启用转码。
-- 当前是否优先使用内置 `ffmpeg`。
-- `ffmpeg` 是否真正可启动，以及官方 `preprocess_stage` warning 是否属于插件前置阶段。
-
-## 常见问题与排障
-
-### 上传 zip 后提示找不到 metadata.yaml 或 Not a directory: CHANGELOG.md
-
-请确认你上传的是 Release 页面里的 `astrbot_plugin_volcengine_asr.zip`，并且 zip 顶层只有一个插件目录：
-
-```text
-astrbot_plugin_volcengine_asr/
-├── metadata.yaml
-├── main.py
-├── _conf_schema.json
-└── requirements.txt
-```
-
-不要使用 GitHub 绿色 Code 按钮下载的源码 zip 代替 Release zip，也不要自己把 `CHANGELOG.md`、`main.py`、`metadata.yaml` 直接平铺压缩。平铺包在 AstrBot v4.24.2 上传安装器中可能触发 `Not a directory: CHANGELOG.md`。
-
-### 提示需要 ffmpeg
+### 提示需要 `ffmpeg`
 
 按顺序检查：
 
-1. 你是否使用的是 Release zip。
-2. 当前服务器是否为 Linux x86_64 / amd64。
+1. 是否使用 Release zip。
+2. 服务器是否为 Linux x86_64 / amd64。
 3. `prefer_bundled_ffmpeg` 是否为 `true`。
-4. `ffmpeg_path` 是否为 `auto` 或正确的绝对路径。
-5. 如果不是 x86_64 架构，是否已经安装系统 `ffmpeg`。
-6. 运行 `/volc_asr_status`，查看 `ffmpeg状态` 是否为可用；如果不可用，日志会说明内置、`imageio-ffmpeg`、PATH 分别为什么启动失败。
+4. `ffmpeg_path` 是否为 `auto` 或正确绝对路径。
+5. `/volc_asr_status` 中 `ffmpeg状态` 是否可用。
 
 非 Linux x86_64 / amd64 环境建议：
 
@@ -861,158 +1291,98 @@ prefer_bundled_ffmpeg = false
 ffmpeg_path = /usr/bin/ffmpeg
 ```
 
-路径按你的实际系统修改。
+路径按你的系统修改。
 
-### preprocess_stage 提示 Voice processing failed: not a valid file: xxx.amr
+### `preprocess_stage` 提示 `Voice processing failed`
 
-如果日志里出现：
+如果日志出现：
 
 ```text
 [preprocess_stage.stage:81]: Voice processing failed: not a valid file: xxx.amr
 ```
 
-先看一件事：关闭本插件后这条 warning 是否仍然出现。
+注意：这通常发生在插件 handler 之前。它属于 AstrBot 官方预处理阶段，不一定代表本插件失败。
 
-如果关闭本插件仍出现，说明它发生在本插件 handler 之前，是 AstrBot 官方 `PreProcessStage` 在尝试把 `Record(file="xxx.amr")` 转成本地 WAV。这个阶段不等于本插件 ffmpeg 转码，也不等于火山 ASR 失败。
+判断方式：
 
-AstrBot v4.24.2 的官方预处理大致会做：
+| 日志位置 | 含义 |
+| :--- | :--- |
+| `preprocess_stage.stage:81` | 官方预处理在插件前读不到语音文件。 |
+| `agent_sub_stages.internal:402` | 后续 agent 仍扫到旧 `Record`，需要检查插件清理是否生效。 |
+| 插件日志或聊天提示 `ffmpeg` 失败 | 插件转码链路出现问题。 |
+| 插件日志出现火山 `logid` | ASR 请求已到火山，可按 logid 排查。 |
+
+Docker / NapCat 场景中，常见原因是 NapCat 返回的 `.amr` 文件路径不在 AstrBot 容器内，或两个容器没有共享同一个数据卷。
+
+### `agent_sub_stages` 仍报 `not a valid file: xxx.amr`
+
+先确认：
+
+1. 插件版本至少为 `2.1.12`。
+2. 安装的是 Release 附件，不是旧 zip。
+3. 已重启 AstrBot。
+4. `/volc_asr_status` 显示版本正确。
+
+如果仍出现，说明仍有旧 `Record` 藏在未覆盖的上下文或其他插件缓存中。请提供：
 
 ```text
-event.get_messages()
-  -> 找到 Record
-  -> component.convert_to_file_path()
-  -> ensure_wav(original_path)
-  -> 写回 component.file / component.path
+/volc_asr_status
 ```
 
-在 Ubuntu 宝塔面板 Docker 里，这条 warning 很常见：NapCat / OneBot 给出的 `xxx.amr` 可能是 NapCat 容器里的临时文件名，或只是 OneBot file id，并不是 AstrBot 容器内真实存在的路径。
+以及过滤日志：
 
-排查顺序：
-
-1. AstrBot 官方 STT 不用时，确认 `provider_stt_settings.enable=false`，并清空或不配置 `provider_stt_settings.provider_id`。
-2. 如果还出现 warning，继续检查 `platform_settings.path_mapping` 和 Docker volume。官方 Record 转 WAV 预处理不完全受 STT 开关控制。
-3. 如果 NapCat 和 AstrBot 分在不同容器，尽量让两边共享同一个数据目录，例如都能看到 `/AstrBot/data`。
-4. 保持本插件 `submit_mode=base64`，让插件通过 OneBot `get_record(file, out_format)` 尝试取回真实语音内容，再交给插件自己的 ffmpeg 转码链路。
-5. `2.1.7` 起，插件也会扫描 `event.extras` / `message_obj.extras` 等缓存里的嵌套 `Record`；`2.1.9` 起会在 agent 前进一步净化未知 extras 和 `run_context` 缓存，减少旧 `.amr` 带进 agent 的概率。
-6. 插件开启后重点观察是否还出现 `agent_sub_stages.internal:402` 的 `not a valid file: xxx.amr`。如果只剩 `preprocess_stage` warning，而没有 agent 阶段 error，说明插件后续接管链路已经生效，剩下的是官方前置预处理与 Docker/NapCat 文件可读性问题。
-
-简短判断：
-
-```text
-preprocess_stage warning = 官方预处理在插件之前读不到 Record 文件
-agent_sub_stages error = 官方 agent 后续仍扫到旧 Record
-本插件 ffmpeg 失败 = 日志通常会出现在“语音识别准备失败”或 /volc_asr_status 的 ffmpeg状态中
+```bash
+docker logs --tail=500 astrbot 2>&1 | grep -E 'preprocess_stage|agent_sub_stages|get_record|ffmpeg|not a valid file|语音识别'
 ```
 
-### Agent 阶段报 not a valid file: xxx.amr
+### 报 `'dict' object has no attribute 'model_dump_for_context'`
 
-如果 AstrBot 日志中出现类似：
+这是旧版本在净化 `ProviderRequest` 时可能把活对象替换成普通 dict 导致的。`v2.1.11` 起已修复：插件会原地清理 ProviderRequest-like 对象，不再把它序列化后写回缓存。
 
-```text
-Error occurred while processing agent: not a valid file: d288c78e8c3716a65e75983adcdd4a5a.amr
-```
+### Bot 只回复转写文本，不继续对话
 
-通常不是火山 ASR 不支持 AMR，也不是插件 `ffmpeg` 转码阶段失败，而是消息在识别成功后继续流向 agent 阶段时，旧消息链里还残留了 OneBot / NapCat 的 `Record(file="xxx.amr")`。这类 `file` 很多时候只是平台临时文件名，不是 AstrBot 机器上的真实本地路径，所以后续组件把它当文件校验时会报错。
-
-`2.1.2` 继续加固了这条链路：
-
-- 情绪判断前会先清理当前语音 `Record`，避免情绪判断路径把旧 `.amr` 残留带到后续 agent。
-- 识别失败、配置错误、未听清直接提示、`reply_transcription=true` 直接回复转写等直接回复路径，会先 `stop_event()` 再发送回复，避免默认 agent 继续处理原语音。
-- 识别成功或未听清注入时，会把 `event.message`、`event.message_chain`、`event.raw_message`、`message_obj.message`、`message_obj.message_chain`、`message_obj.raw_message` 等常见入口同步替换为纯 `Plain` 文本。
-- 替换前会先原地改写旧消息链 list。即使 AstrBot 或其他插件已经持有旧 list 引用，也会看到纯文本，而不是旧 `Record(file="xxx.amr")`。
-- 对 AstrBot 内置 agent `build_main_agent` 的前置扫描路径，`2.1.2` 会额外提供干净 `provider_request`，绕开 `event.message_obj.message` / `Reply.chain` 中残留媒体段被扫描和转换。
-- 消息链清理支持非 list `MessageChain`，避免链对象不是普通 list 时跳过清理。
-- LLM 请求阶段会清空 `ProviderRequest.audio_urls`，并净化 `contexts`、`extra_user_content_parts`、`messages`、`content`、`files` 等可能残留音频附件的字段。
-- 语音段查找兼容 `message`、`message_chain`、`raw_message`、裸 OneBot `record` dict 以及嵌套 dict 形态。
-- 对只有裸 `file="xxx.amr"` 的 OneBot / NapCat 语音，插件会先尝试组件 `convert_to_base64()`；失败后再尝试 OneBot `get_record` 获取真实语音内容。拿到 AMR bytes 后仍会正常进入插件 `ffmpeg` 转码链路。
-
-如果你仍然看到这个错误，请先确认安装的是 Release 页面中的 `2.1.2` 或更高版本 zip，并重启 AstrBot。然后检查平台是否只提供了裸文件名、没有可下载 URL 或 base64 数据；这种情况下插件会尽量走 `convert_to_base64()`，但平台适配器本身也需要能取得原语音内容。
-
-### URL 模式失败
-
-大多数 OneBot / NapCat 语音 URL 是内网地址、临时地址，或需要 AstrBot 所在机器携带上下文访问。火山引擎服务器通常无法直接访问这些 URL。
-
-建议保持：
+检查：
 
 ```text
-submit_mode = base64
-```
-
-只有当你确认语音 URL 能被公网匿名访问时，才建议尝试 `submit_mode=url`。
-
-### LLM 没有收到语音内容
-
-检查这些配置：
-
-```text
-auto_recognize = true
 inject_as_user_input = true
 reply_transcription = false
 ```
 
-再看日志中是否出现：
+如果 `reply_transcription=true`，插件会进入调试或旧行为：直接回复转写结果。
 
-```text
-已将语音识别结果注入为干净用户输入
-已在 LLM 请求阶段应用语音提示词模板
+### 想让 Bot 收到语音后尽量语音回复
+
+本插件负责“语音输入”。语音输出需要 TTS 插件或 AstrBot 的 TTS 能力。
+
+推荐链路：
+
+1. 本插件把用户 QQ 语音转成干净用户输入。
+2. 主 LLM 正常理解和回复。
+3. TTS 插件把 LLM 回复转成语音。
+
+默认 `voice_prompt_template` 可以引导主 LLM 倾向语音风格回复，但实际能否语音输出取决于你是否配置了 TTS。
+
+### Release 页面或终端显示乱码
+
+仓库文件按 UTF-8 保存。Windows PowerShell 或某些终端显示乱码，通常是控制台编码问题，不代表文件损坏。
+
+如果 GitHub Release 正文出现大量 `????` 或明显错码，那是 Release 正文被错误编码写入，需要重新用 UTF-8 正文更新 Release。插件 zip 本身是否正确，应以 SHA256 和 zip 内文件内容为准。
+
+### SHA256 是什么
+
+SHA256 是文件校验码，用来确认下载包没有损坏或被替换。
+
+Windows PowerShell 校验：
+
+```powershell
+Get-FileHash .\astrbot_plugin_volcengine_asr.zip -Algorithm SHA256
 ```
 
-如果第一条没有出现，说明 ASR 或事件注入阶段可能没有成功。如果第二条没有出现，说明 LLM 请求阶段可能没有走到，或事件没有携带对应标记。
+---
 
-### Bot 直接回复“语音转文字：xxx”
+## 目录结构与发布包
 
-这是直接回复模式。关闭：
-
-```text
-reply_transcription = false
-```
-
-默认推荐让语音进入 LLM，而不是直接把转写结果发回聊天。
-
-### 静音或杂音时回复很机械
-
-建议开启：
-
-```text
-inject_on_unclear_voice = true
-```
-
-然后优化 `unclear_voice_prompt`，让模型用更自然的方式请用户重说。
-
-### 群聊里所有语音都会触发，太吵了
-
-开启：
-
-```text
-only_when_at_or_wake = true
-```
-
-这样只有 Bot 被 @ 或被唤醒时才识别群聊语音。
-
-### 火山接口失败，需要排查
-
-临时开启：
-
-```text
-show_logid = true
-notify_asr_error = true
-```
-
-复现一次后，记录日志或回复中的 `logid`，再结合火山引擎控制台、接口权限、资源 ID、账户余额和网络连通性排查。
-
-### 仓库安装和 Release 安装有什么区别
-
-| 项目 | Release zip | GitHub 仓库安装 | GitHub 源码 zip |
-| :--- | :--- | :--- | :--- |
-| AstrBot 推荐程度 | 推荐 | 可用 | 不推荐直接当发布包用 |
-| zip/仓库入口 | 顶层单插件目录，目录内含 `metadata.yaml` | 仓库根目录直接含 `metadata.yaml` | 通常外层会套源码目录 |
-| 是否带内置 `ffmpeg` | 是 | 否 | 否 |
-| 适合 Docker / VPS | 是 | 依赖环境 | 依赖环境 |
-| 适合普通用户 | 最适合 | 适合能处理依赖的人 | 容易装错 |
-
-## 目录结构与发布包说明
-
-仓库结构大致如下：
+仓库结构：
 
 ```text
 .
@@ -1025,32 +1395,48 @@ notify_asr_error = true
 ├── requirements.txt
 ├── CHANGELOG.md
 ├── README.md
-├── third_party_licenses/
-│   └── imageio-ffmpeg.LICENSE
+├── scripts/
+│   └── build_release_zip.py
+├── tests/
 └── astrbot_plugin_volcengine_asr/
     ├── assets/
-    │   ├── VoiceMountain.svg
-    │   └── FuckUCodeScore.svg
+    ├── bin/linux-x86_64/ffmpeg
     ├── main.py
     ├── metadata.yaml
     ├── _conf_schema.json
     ├── requirements.txt
     ├── CHANGELOG.md
-    ├── README.md
-    └── bin/linux-x86_64/ffmpeg
+    └── README.md
 ```
 
 说明：
 
-- 仓库根目录用于支持 AstrBot 从 GitHub 仓库地址安装。
-- `astrbot_plugin_volcengine_asr/` 用于生成 Release zip。
-- 根目录 `main.py` 是轻量入口，插件完整实现位于 `astrbot_plugin_volcengine_asr/main.py`。
-- Release zip 顶层固定套一层 `astrbot_plugin_volcengine_asr/` 插件目录，用于兼容 AstrBot 上传安装器。
-- Release zip 会包含 Linux x86_64 / amd64 内置 `ffmpeg`。
+| 路径 | 用途 |
+| :--- | :--- |
+| 仓库根目录 | 支持 AstrBot 从 GitHub 仓库地址安装。 |
+| 根目录 `main.py` | 轻量入口，完整实现位于包目录。 |
+| `astrbot_plugin_volcengine_asr/` | Release zip 的内容来源。 |
+| `bin/linux-x86_64/ffmpeg` | Release zip 内置 ffmpeg。 |
+| `scripts/build_release_zip.py` | 构建并校验 Release zip。 |
 
-## 验证与维护说明
+Release zip 顶层固定只有：
 
-发布前建议至少确认：
+```text
+astrbot_plugin_volcengine_asr/
+```
+
+打包脚本会检查：
+
+1. zip 第一项必须是 `astrbot_plugin_volcengine_asr/`。
+2. 顶层只能有这个目录。
+3. 必须包含 `metadata.yaml`、`main.py` 和内置 `ffmpeg`。
+4. `bin/linux-x86_64/ffmpeg` 在 zip 中的权限必须是 `0o100755`。
+
+---
+
+## 开发与验证
+
+发布前建议至少执行：
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile main.py astrbot_plugin_volcengine_asr/main.py scripts/update_fuck_u_code_score.py scripts/build_release_zip.py
@@ -1064,73 +1450,104 @@ python3 -c "import json,pathlib; [json.loads(pathlib.Path(p).read_text(encoding=
 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q -p no:cacheprovider tests
 ```
 
-如果本地没有 `pytest`，至少应确保纯函数 helper 的测试逻辑能运行，配置 JSON 能解析，Release zip 顶层目录结构正确。
-
 构建 Release zip：
 
 ```bash
 python3 scripts/build_release_zip.py
 ```
 
-发布时只上传 `output/astrbot_plugin_volcengine_asr.zip`。根目录旧 zip、`_release_body.json`、`_release_draft.json` 都不是发布依据。
+只改文档时，至少检查两份 README 是否一致、是否 UTF-8 可读、是否仍然把 `v2.0.0` 和 `v2.1.0` 的职责写反。
+
+---
 
 ## Web UI 接口预留
 
-当前 `main` 仍不把完整 Web UI 合进来，但已经为后续独立 Web UI 分支预留稳定后端接口。未来插件配置页、状态页、情绪计算可视化，都应优先调用这些方法，而不是直接读取插件内部属性。
+当前插件不内置完整 Web UI，但已经预留稳定后端接口。未来配置页、状态页和情绪计算可视化应优先调用这些方法，而不是直接读取插件内部属性。
 
 | 接口 | 用途 |
 | :--- | :--- |
-| `get_webui_state()` | 返回运行状态快照，包括鉴权模式、接口地址、提交模式、转码参数、情绪判断状态、LivingMemory 兼容状态。 |
+| `get_webui_state()` | 返回运行状态快照，包括鉴权、接口、提交模式、转码、情绪判断和 LivingMemory 兼容状态。 |
 | `get_webui_config_schema()` | 返回 `_conf_schema.json`，供 Web UI 渲染配置表单。 |
-| `get_webui_config_snapshot()` | 返回当前配置值，并对 `api_key`、`access_key` 做掩码，避免前端直接暴露密钥。 |
-| `update_webui_config(updates)` | 预留给 Web UI 保存配置；会执行字段白名单、类型转换、选项校验、范围校验、密钥掩码跳过和运行时重载。 |
+| `get_webui_config_snapshot()` | 返回当前配置值，并对密钥做掩码。 |
+| `update_webui_config(updates)` | 预留给 Web UI 保存配置，包含字段白名单、类型转换、范围校验和运行时重载。 |
 
-`update_webui_config()` 返回结构：
+---
 
-```json
-{
-  "applied": {
-    "submit_mode": "base64"
-  },
-  "skipped": {
-    "api_key": "密钥未变更"
-  },
-  "errors": {}
-}
+## 版本叙事
+
+`2.0.0` 是本插件的核心能力版本：它引入可选情绪判断 LLM，把语音输入从“只有转写文本”扩展为“文本内容 + 受限语气参考”。它确立了三条原则：
+
+1. 情绪判断不是心理诊断。
+2. 情绪结果不写入消息链和长期记忆。
+3. 主 LLM 只能按 `respect_weight` 有限参考情绪判断。
+
+`2.1.0` 是语音工作流重建版本：它定义了今天仍在使用的五段式主链路：
+
+```text
+VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest
 ```
 
-密钥字段有一个专门保护：如果 Web UI 把 `get_webui_config_snapshot()` 中的掩码值原样传回，插件会认为密钥未变更，不会把真实密钥覆盖成 `****` 或 `abcd...wxyz`。后续开发配置型 Web UI 时必须保留这个语义。
+`2.1.x` 之后的大多数版本，都是围绕真实部署环境做兼容修补。README 默认只展示关键节点，完整顺序放进折叠区，避免主页面变成冗长补丁流水账。
 
-## 版本说明
+| 版本节点 | 默认显示原因 |
+| :--- | :--- |
+| `v2.0.0` | 项目能力核心：引入情绪判断 LLM、结构化 JSON 和 `respect_weight`。 |
+| `v2.1.0` | 架构核心：重建五段式语音工作流。 |
+| `v2.1.8` | 把情绪权重公式抽成 `EmotionWeightingPolicy`，方便后续分支安全改算法。 |
+| `v2.1.11` | 修复 ProviderRequest 活对象被 dict 化导致的 `model_dump_for_context` 问题。 |
+| `v2.1.12` | 修复 AstrBot 上传安装包目录结构，Release zip 固定为单顶层目录。 |
 
-当前版本：`2.1.12`
+<details>
+<summary>展开：按顺序查看 2.1.x 修补史</summary>
 
-本版本重点：
+| 版本 | 类型 | 主要意义 |
+| :--- | :--- | :--- |
+| `v2.1.0` | 架构重建 | 将语音主链路固定为 `VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest`。 |
+| `v2.1.1` | 失败路径清理 | 清理情绪判断与直接回复路径的语音残留，避免失败后旧 `Record` 继续进入 agent。 |
+| `v2.1.2` | agent 媒体扫描绕过 | 提前写入干净 `provider_request`，绕过内置 agent 对旧 `.amr` 的媒体扫描。 |
+| `v2.1.3` | 发布通道修复 | 重新发布 Release，规避 GitHub immutable release 占用并修复发布说明编码。 |
+| `v2.1.4` | AstrBot 更新器兼容 | 补充仓库 URL，并收紧与官方 agent 的交接方式。 |
+| `v2.1.5` | Docker / NapCat 排障 | 增强 `/volc_asr_status` 与 README 排障说明，明确 `preprocess_stage` 边界。 |
+| `v2.1.7` | Record 发现加固 | 扫描 `event.extras`、`message_obj.extras` 等异形缓存中的嵌套 record。 |
+| `v2.1.8` | agent 缓存与情绪接口 | 新增 `on_agent_begin` 兜底清理，并抽出 `EmotionWeightingPolicy`。 |
+| `v2.1.9` | 未知缓存与 run_context | 加固 agent 前未知缓存和 `run_context` 清理。 |
+| `v2.1.10` | Release 重发 | 重发 `v2.1.9` 修复，规避 immutable release 锁，确保有正式 zip 附件。 |
+| `v2.1.11` | ProviderRequest 活对象保护 | 原地净化 ProviderRequest-like 对象，避免变成普通 dict。 |
+| `v2.1.12` | 上传包目录结构 | Release zip 固定为 `astrbot_plugin_volcengine_asr/` 单顶层目录，兼容 AstrBot 上传安装器。 |
 
-- 重新构建语音工作流：`VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest`。
-- 新增干净 `provider_request`，绕开 AstrBot 内置 agent `build_main_agent` 在构造请求前对 `event.message_obj.message` / `Reply.chain` 的媒体扫描，并兼容非 list `MessageChain`。
-- 裸 OneBot / NapCat `Record(file="xxx.amr")` 会在组件转换失败后尝试 `get_record(file, out_format)`，确保能取到真实 AMR 内容并交给 ffmpeg 转码。
-- 情绪判断前先清理语音 `Record`，直接回复和失败路径先 `stop_event()` 再回复，避免 `not a valid file: xxx.amr`。
-- `_find_records()` 会扫描主消息链和 extras 缓存，减少异形适配器缓存里的旧语音段进入官方 agent 的概率。
-- `EmotionWeightingPolicy` 把情绪 `respect_weight` 公式抽成可替换接口，默认行为保持不变，方便后续分支独立调整公式。
-- `emotion_model_id` 在 WebUI 中支持点击选择已配置模型；留空时使用当前会话默认模型。
-- 成功识别后，消息阶段只写入干净 `Plain` 文本，LLM 请求阶段再应用语音提示词和情绪辅助。
-- `ProviderRequest` 阶段继续清理音频残留，并在找不到原始转写文本时前置 `llm_text`、保留原 prompt，避免丢失 LivingMemory 或 provider 上下文。
-- `submit_mode=url` 不再信任 `.amr` / `.silk` 这类 QQ 语音 URL，会回落到下载、转码和 Base64 上传。
-- 保留 2.0.4 的 ffmpeg 启动探测、降级、`/volc_asr_status` 状态显示和 Release zip 权限校验。
-- 增加工作流回归测试，覆盖成功注入、未听清注入、错误阻断、裸 `.amr` 转换失败、URL AMR 不直传和 LLM 请求兜底。
+后续版本确实很重要。它们修复了 Docker / NapCat 路径隔离、AstrBot 官方 `preprocess_stage` 与插件 handler 的先后关系、`agent_sub_stages` 里的旧 `Record` 残留、ProviderRequest 活对象保护、extras / run context 深层清理、Release zip 单顶层目录结构、GitHub Release 编码等问题。
 
-完整更新记录见 [CHANGELOG.md](./CHANGELOG.md)。
+可是这些问题本质上是“让核心能力在真实环境里跑稳”。它们不应该覆盖项目主叙事。用户打开 README 时，第一眼应该知道这个插件能做什么、为什么这样设计、该怎么安装；完整补丁历史应该放在 [CHANGELOG.md](./CHANGELOG.md)。
+
+</details>
+
+换句话说，后续版本可以继续修一万个 bug，但项目核心定位仍然是：
+
+> 让语音输入像文字输入一样可靠进入 AstrBot 的 LLM、记忆和回复流程，并在需要时提供受控的语气参考。
+
+完整历史见 [CHANGELOG.md](./CHANGELOG.md)。
+
+---
 
 ## 第三方组件与许可证
 
 本插件涉及或间接使用以下组件：
 
-- 火山引擎豆包语音大模型录音文件极速版识别 API
-- `httpx`
-- `imageio-ffmpeg`
-- `ffmpeg`
+- [AstrBot](https://github.com/AstrBotDevs/AstrBot)
+- [OneBot v11](https://github.com/botuniverse/onebot-11)
+- [NapCat](https://github.com/NapNeko/NapCatQQ)
+- [火山引擎豆包语音识别](https://www.volcengine.com/)
+- [ffmpeg](https://ffmpeg.org/)
+- [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg)
 
-`imageio-ffmpeg` 的许可证文本见 [third_party_licenses/imageio-ffmpeg.LICENSE](./third_party_licenses/imageio-ffmpeg.LICENSE)。
+内置 `ffmpeg` 的许可证信息见 `third_party_licenses/imageio-ffmpeg.LICENSE`。
 
-本项目使用 MIT License。内置或间接使用的第三方组件遵循其各自许可证。
+---
+
+## 维护原则
+
+- 默认优先保护主语音链路，不为了小范围适配破坏 ASR、转码、注入和 ProviderRequest 清理边界。
+- 遇到真实环境 bug，优先补诊断和回归测试，再补兼容逻辑。
+- 不默认 monkey patch AstrBot 私有 pipeline，除非明确引入实验开关并说明风险。
+- 情绪判断、Web UI、TTS 联动都应作为可替换层，不要绑死在语音识别主流程里。
+- 文档主叙事以 `v2.0.0` 的能力为中心；后续 bugfix 进入修补史和 CHANGELOG。
