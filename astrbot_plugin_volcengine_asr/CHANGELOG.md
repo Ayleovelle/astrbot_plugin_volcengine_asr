@@ -1,5 +1,13 @@
 # 更新说明
 
+## v2.1.10 - 重发 v2.1.9 修复并规避 immutable release 锁
+
+### 主要变更
+
+- 运行时代码沿用 `v2.1.9` 的 agent 前未知缓存与 `run_context` 清理加固。
+- 版本推进到 `2.1.10`，用于规避 GitHub 对已创建 `v2.1.9` Release 的 immutable 限制，确保正式 Release 页面可以携带 `astrbot_plugin_volcengine_asr.zip` 附件。
+- 安装时请使用 `v2.1.10` Release 附件，不要使用没有发布附件的 `v2.1.9` tag 或 GitHub 自动源码 zip。
+
 ## v2.1.9 - 加固 agent 前未知缓存与 run_context 清理
 
 ### 主要变更
