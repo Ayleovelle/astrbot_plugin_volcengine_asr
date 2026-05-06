@@ -1,15 +1,6 @@
 <!-- markdownlint-disable MD024 MD033 MD041 MD051 -->
 
 <p align="center">
-  <img src="./assets/komari-mascot.png" alt="项目吉祥物小鞠" width="220">
-</p>
-
-<p align="center">
-  <strong>项目吉祥物：小鞠</strong><br>
-  <sub>少、少啰嗦，她只是来监督 README 不要再写成 bug 日志。</sub>
-</p>
-
-<p align="center">
   <img src="./assets/VoiceMountain.svg" alt="火山引擎语音转文字 AstrBot 插件" width="920">
 </p>
 
@@ -42,25 +33,68 @@
 
 ## 快速导航
 
-| 主题 | 内容 |
-| :--- | :--- |
-| [项目定位](#项目定位) | 为什么它不是普通的“语音转文字回复器”。 |
-| [2.0.0 核心能力](#200-核心能力情绪判断-llm) | 情绪判断 LLM、语气参考层、`respect_weight` 公式。 |
-| [详细论证](#情绪权重计算与论证) | 像论文一样展开公式、边界、假设和失效条件。 |
-| [快速开始](#快速开始) | Release zip 安装、仓库安装、最小配置。 |
-| [语音工作流](#语音工作流) | `VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest`。 |
-| [兼容设计](#兼容设计) | AstrBot / OneBot / NapCat / Docker / ffmpeg 的边界。 |
-| [配置指南](#配置指南) | 推荐配置、完整配置项、提示词模板。 |
-| [排障](#常见问题与排障) | `not a valid file`、上传包结构、ffmpeg、ProviderRequest。 |
-| [版本叙事](#版本叙事) | 2.0.0 是能力主线，2.1.x 主要是兼容修补史。 |
-| [项目吉祥物](#项目吉祥物小鞠) | 小鞠展示图与完整 Codex 宠物图集。 |
+<table align="center">
+  <thead>
+    <tr>
+      <th align="left">主题</th>
+      <th align="left">内容</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href="#项目定位">项目定位</a></td>
+      <td>为什么它不是普通的“语音转文字回复器”。</td>
+    </tr>
+    <tr>
+      <td><a href="#200-核心能力情绪判断-llm">2.0.0 核心能力</a></td>
+      <td>情绪判断 LLM、语气参考层、<code>respect_weight</code> 公式。</td>
+    </tr>
+    <tr>
+      <td><a href="#情绪权重计算与论证">详细论证</a></td>
+      <td>像论文一样展开公式、边界、假设和失效条件。</td>
+    </tr>
+    <tr>
+      <td><a href="#快速开始">快速开始</a></td>
+      <td>Release zip 安装、仓库安装、最小配置。</td>
+    </tr>
+    <tr>
+      <td><a href="#语音工作流">语音工作流</a></td>
+      <td><code>VoiceInput</code> -> <code>AudioPayloadResult</code> -> <code>ASR</code> -> <code>VoiceInjectionPlan</code> -> <code>ProviderRequest</code>。</td>
+    </tr>
+    <tr>
+      <td><a href="#兼容设计">兼容设计</a></td>
+      <td>AstrBot / OneBot / NapCat / Docker / ffmpeg 的边界。</td>
+    </tr>
+    <tr>
+      <td><a href="#配置指南">配置指南</a></td>
+      <td>推荐配置、完整配置项、提示词模板。</td>
+    </tr>
+    <tr>
+      <td><a href="#常见问题与排障">排障</a></td>
+      <td><code>not a valid file</code>、上传包结构、ffmpeg、ProviderRequest。</td>
+    </tr>
+    <tr>
+      <td><a href="#版本叙事">版本叙事</a></td>
+      <td>2.0.0 是能力主线，2.1.x 主要是兼容修补史。</td>
+    </tr>
+    <tr>
+      <td><a href="#项目吉祥物小鞠">项目吉祥物</a></td>
+      <td>小鞠展示图与完整 Codex 宠物图集。</td>
+    </tr>
+  </tbody>
+</table>
 
 ---
 
 ## 项目吉祥物：小鞠
 
 <p align="center">
-  <img src="./assets/komari-mascot.png" alt="项目吉祥物小鞠" width="180">
+  <img src="./assets/komari-wave.gif" alt="项目吉祥物小鞠挥手动图" width="220">
+</p>
+
+<p align="center">
+  <strong>小鞠正在 README 门口值班。</strong><br>
+  <sub>少、少啰嗦，她只是来监督核心能力别被 bugfix 淹没。</sub>
 </p>
 
 小鞠是这个项目的 Codex 宠物吉祥物。她的工作不参与 ASR、转码、ProviderRequest 清理或情绪权重计算，只负责在文档里安静地提醒维护者：核心能力要讲清楚，后续 bugfix 要收进修补史里。
@@ -72,7 +106,7 @@
   <img src="./assets/komari-spritesheet.webp" alt="小鞠 Codex 宠物完整动作图集" width="760">
 </p>
 
-宠物源文件已整理进仓库 `assets/` 目录。README 使用相对路径资源，保证 GitHub、Release 包和 AstrBot 插件目录中都能正常显示。
+宠物源文件已整理进仓库 `assets/` 目录。README 开篇展示使用轻量挥手 GIF；完整 spritesheet 保留在折叠区，保证 GitHub、Release 包和 AstrBot 插件目录中都能正常显示。
 
 </details>
 
