@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.1.6-brightgreen.svg" alt="Version 2.1.6">
+  <img src="https://img.shields.io/badge/Version-2.1.7-brightgreen.svg" alt="Version 2.1.7">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License MIT">
@@ -126,9 +126,9 @@ VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest
 - 识别失败、配置错误、未听清直接提示、`reply_transcription=true` 直接回复转写等不需要默认 LLM 继续处理原语音的路径，会先 `stop_event()`，再发送回复。
 - 这样可以避免后续 agent 或媒体转换逻辑继续读取裸 `.amr` 文件名，减少 `not a valid file: xxx.amr`。
 
-## 2.1.6 异形缓存 Record 发现加固
+## 2.1.7 异形缓存 Record 发现加固
 
-`2.1.6` 不重写主工作流，重点补一个很窄但实际容易踩到的边界：有些适配器或其它插件会把 OneBot / NapCat 的 `Record(file="xxx.amr")` 缓存在 `event.extras`、`message_obj.extras`、`request`、`input`、`messages`、`content` 等字段里。旧版主消息链已经清干净时，这些缓存仍可能让后续官方 agent 再看到旧语音段。
+`2.1.7` 不重写主工作流，重点补一个很窄但实际容易踩到的边界：有些适配器或其它插件会把 OneBot / NapCat 的 `Record(file="xxx.amr")` 缓存在 `event.extras`、`message_obj.extras`、`request`、`input`、`messages`、`content` 等字段里。旧版主消息链已经清干净时，这些缓存仍可能让后续官方 agent 再看到旧语音段。
 
 - `_find_records()` 现在会额外扫描 `event.extras` / `event._extras` / `event.extra` 和 `message_obj` 上的同名缓存容器。
 - 这些缓存里的嵌套 `Record` 会被纳入插件接管流程，继续走 `get_record`、ffmpeg 转码、火山 ASR、干净 `ProviderRequest` 注入。
@@ -843,7 +843,7 @@ event.get_messages()
 2. 如果还出现 warning，继续检查 `platform_settings.path_mapping` 和 Docker volume。官方 Record 转 WAV 预处理不完全受 STT 开关控制。
 3. 如果 NapCat 和 AstrBot 分在不同容器，尽量让两边共享同一个数据目录，例如都能看到 `/AstrBot/data`。
 4. 保持本插件 `submit_mode=base64`，让插件通过 OneBot `get_record(file, out_format)` 尝试取回真实语音内容，再交给插件自己的 ffmpeg 转码链路。
-5. `2.1.6` 起，插件也会扫描 `event.extras` / `message_obj.extras` 等缓存里的嵌套 `Record`，减少异形缓存把旧 `.amr` 带进 agent 的概率。
+5. `2.1.7` 起，插件也会扫描 `event.extras` / `message_obj.extras` 等缓存里的嵌套 `Record`，减少异形缓存把旧 `.amr` 带进 agent 的概率。
 6. 插件开启后重点观察是否还出现 `agent_sub_stages.internal:402` 的 `not a valid file: xxx.amr`。如果只剩 `preprocess_stage` warning，而没有 agent 阶段 error，说明插件后续接管链路已经生效，剩下的是官方前置预处理与 Docker/NapCat 文件可读性问题。
 
 简短判断：
@@ -1053,7 +1053,7 @@ python3 scripts/build_release_zip.py
 
 ## 版本说明
 
-当前版本：`2.1.6`
+当前版本：`2.1.7`
 
 本版本重点：
 
