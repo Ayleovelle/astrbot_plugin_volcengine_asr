@@ -20,6 +20,7 @@ from astrbot_plugin_volcengine_asr.main import (
     _render_prompt_template,
     _replace_first_text,
     _safe_parse_json_object,
+    _sanitize_provider_request,
 )
 import astrbot.api.message_components as Comp
 from scripts.update_fuck_u_code_score import build_svg, extract_score, find_score, normalize_score
@@ -51,6 +52,50 @@ class _FakeEvent:
 
     def get_messages(self):
         return self.message_obj.message
+
+
+class _FakeProviderRequest:
+    def __init__(self):
+        self.prompt = "干净文本"
+        self.audio_urls = ["2f7e2f96f5d363c6311f8bacdaafea11.amr"]
+        self.image_urls = []
+        self.messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "audio_url", "audio_url": "message-hidden.amr"},
+                    {"type": "text", "text": "保留 message 文字"},
+                ],
+            }
+        ]
+        self.files = ["hidden-file.amr"]
+        self.contexts = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "保留这句"},
+                    {"type": "audio_url", "audio_url": "2f7e2f96f5d363c6311f8bacdaafea11.amr"},
+                ],
+            }
+        ]
+        self.extra_user_content_parts = [
+            {"type": "text", "text": "[Audio Attachment: path 2f7e2f96f5d363c6311f8bacdaafea11.amr]"},
+            {"type": "text", "text": "保留额外文字"},
+        ]
+
+
+class _AudioPart:
+    type = "audio_url"
+
+    def __init__(self, audio_url):
+        self.audio_url = audio_url
+
+
+class _TextPart:
+    type = "text"
+
+    def __init__(self, text):
+        self.text = text
 
 
 def test_render_prompt_template_supports_angle_placeholder_with_braces_text():
@@ -142,6 +187,14 @@ def test_find_records_reads_compatible_message_chains():
         raw_nested_record,
         raw_dict_record,
     ]
+
+
+def test_find_records_reads_bare_raw_record_dict():
+    event = _FakeEvent()
+    raw_record = {"type": "record", "data": {"file": "raw.amr"}}
+    event.raw_message = raw_record
+
+    assert VolcengineAsrPlugin._find_records(event) == [raw_record]
 
 
 def test_safe_parse_json_object_handles_raw_and_fenced_json():
@@ -279,11 +332,15 @@ def test_inject_user_text_sets_clean_message_and_asr_extras():
     event = _FakeEvent()
     record = Comp.Record(file="d288c78e8c3716a65e75983adcdd4a5a.amr")
     raw_record = {"type": "record", "data": {"file": "raw.amr"}}
-    event.message = [record]
-    event.message_chain = [record]
+    old_message = [record]
+    old_message_chain = [record]
+    old_obj_message = [record]
+    old_obj_message_chain = [record]
+    event.message = old_message
+    event.message_chain = old_message_chain
     event.raw_message = [raw_record]
-    event.message_obj.message = [record]
-    event.message_obj.message_chain = [record]
+    event.message_obj.message = old_obj_message
+    event.message_obj.message_chain = old_obj_message_chain
     event.message_obj.raw_message = [raw_record]
 
     VolcengineAsrPlugin._inject_user_text(
@@ -302,12 +359,88 @@ def test_inject_user_text_sets_clean_message_and_asr_extras():
     assert event.message_obj.message[0].text == "干净文本"
     assert event.message_obj.message_chain[0].text == "干净文本"
     assert event.message_obj.raw_message == "干净文本"
+    assert old_message[0].text == "干净文本"
+    assert old_message_chain[0].text == "干净文本"
+    assert old_obj_message[0].text == "干净文本"
+    assert old_obj_message_chain[0].text == "干净文本"
     assert VolcengineAsrPlugin._find_records(event) == []
     assert event.extras[ASR_EXTRA_TEXT] == "原始文本"
     assert event.extras[ASR_EXTRA_MEMORY_TEXT] == "干净文本"
     assert event.extras[ASR_EXTRA_LLM_TEXT] == "LLM 文本"
     assert event.extras[ASR_EXTRA_INJECTED] is True
     assert event.extras[ASR_EXTRA_UNCLEAR] is True
+
+
+def test_inject_user_text_sanitizes_cached_extra_records():
+    event = _FakeEvent()
+    event.extras["raw_message"] = [
+        {"type": "record", "data": {"file": "2f7e2f96f5d363c6311f8bacdaafea11.amr"}}
+    ]
+    event.extras["audio_urls"] = ["2f7e2f96f5d363c6311f8bacdaafea11.amr"]
+    event.message_obj.extras = {
+        "contexts": [{"role": "user", "content": [{"type": "audio_url", "audio_url": "cached.amr"}]}],
+        "records": [Comp.Record(file="cached-record.amr")],
+    }
+
+    VolcengineAsrPlugin._inject_user_text(
+        event,
+        memory_text="干净文本",
+        llm_text="LLM 文本",
+        raw_text="原始文本",
+    )
+
+    assert event.extras["raw_message"] == []
+    assert event.extras["audio_urls"] == []
+    assert event.message_obj.extras["contexts"] == [{"role": "user", "content": []}]
+    assert event.message_obj.extras["records"] == []
+    assert event.extras[ASR_EXTRA_MEMORY_TEXT] == "干净文本"
+
+
+def test_sanitize_provider_request_removes_audio_inputs_and_preserves_text():
+    req = _FakeProviderRequest()
+
+    _sanitize_provider_request(req, "干净文本", "LLM 文本")
+
+    assert req.audio_urls == []
+    assert req.contexts == [{"role": "user", "content": [{"type": "text", "text": "保留这句"}]}]
+    assert req.extra_user_content_parts == [{"type": "text", "text": "保留额外文字"}]
+    assert req.messages == [{"role": "user", "content": [{"type": "text", "text": "保留 message 文字"}]}]
+    assert req.files == []
+
+
+def test_sanitize_provider_request_removes_object_audio_parts():
+    req = _FakeProviderRequest()
+    req.extra_user_content_parts = [
+        _AudioPart("object-audio.amr"),
+        _TextPart("保留对象文字"),
+    ]
+
+    _sanitize_provider_request(req, "干净文本", "LLM 文本")
+
+    assert req.extra_user_content_parts == [{"type": "text", "text": "保留对象文字"}]
+
+
+def test_apply_voice_prompt_template_sanitizes_provider_request_audio_inputs():
+    plugin = VolcengineAsrPlugin(None, {"api_key": "token"})
+    event = _FakeEvent()
+    req = _FakeProviderRequest()
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "干净文本")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "LLM 文本")
+    event.set_extra(ASR_EXTRA_INJECTED, True)
+
+    coro = plugin.apply_voice_prompt_template(event, req)
+    try:
+        coro.send(None)
+    except StopIteration:
+        pass
+
+    assert req.prompt == "LLM 文本"
+    assert req.audio_urls == []
+    assert req.contexts == [{"role": "user", "content": [{"type": "text", "text": "保留这句"}]}]
+    assert req.extra_user_content_parts == [{"type": "text", "text": "保留额外文字"}]
+    assert req.messages == [{"role": "user", "content": [{"type": "text", "text": "保留 message 文字"}]}]
+    assert req.files == []
+    assert event.get_extra("volcengine_asr_llm_prompt_applied") is True
 
 
 def test_webui_snapshot_exposes_stable_state_schema_and_config_values():

@@ -1,5 +1,16 @@
 # 更新说明
 
+## v2.0.3 - 加固 agent 音频残留清理
+
+### 主要变更
+
+- 继续修复 AstrBot v4.24.2 agent 阶段可能读取旧 `.amr` 语音段并报 `not a valid file: xxx.amr` 的问题。
+- 识别成功或未听清注入时，先原地改写旧消息链 list，再同步替换 `event.message`、`event.message_chain`、`event.raw_message`、`message_obj.message`、`message_obj.message_chain`、`message_obj.raw_message` 等入口，避免 AstrBot 或其他插件持有旧 list 引用时继续读到 `Record`。
+- LLM 请求阶段增加 `ProviderRequest` 净化，清空 `audio_urls`，并移除 `contexts`、`extra_user_content_parts`、`messages`、`content`、`files` 等字段中残留的音频附件、裸 `.amr` 路径和对象型 audio part。
+- 事件缓存清理扩展到 `event.extras`、`event._extras`、`event.extra` 以及 `message_obj` 上的同名缓存，降低适配器私有缓存继续传递旧语音段的风险。
+- `_find_records()` 增加裸 OneBot `record` dict 兼容，`raw_message={"type":"record","data":{"file":"x.amr"}}` 这类结构也能正常识别。
+- 增加回归测试，覆盖旧消息链 list 原地改写、ProviderRequest 多字段音频净化、对象型 audio part 清理、message_obj 缓存清理和裸 record dict 读取。
+
 ## v2.0.2 - 修复语音 Record 残留
 
 ### 主要变更

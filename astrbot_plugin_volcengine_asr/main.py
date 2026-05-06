@@ -386,6 +386,9 @@ def _iter_message_chains(event: AstrMessageEvent) -> list[Any]:
         if isinstance(chain, list) and id(chain) not in seen:
             seen.add(id(chain))
             chains.append(chain)
+        elif _is_record_component(chain) and id(chain) not in seen:
+            seen.add(id(chain))
+            chains.append([chain])
         elif isinstance(chain, dict):
             for key in ("message", "message_chain", "raw_message"):
                 append_chain(chain.get(key))
@@ -410,8 +413,17 @@ def _iter_message_chains(event: AstrMessageEvent) -> list[Any]:
     return chains
 
 
+def _mutate_message_chains_to_plain_text(event: AstrMessageEvent, text: str) -> None:
+    for old_chain in _iter_message_chains(event):
+        try:
+            old_chain[:] = _plain_message_chain(text)
+        except Exception as exc:
+            logger.warning(f"原地清理旧语音消息链失败，已跳过该链：{exc}")
+
+
 def _replace_event_message_with_plain_text(event: AstrMessageEvent, text: str) -> None:
     chain = _plain_message_chain(text)
+    _mutate_message_chains_to_plain_text(event, text)
     event.message_str = text
 
     for attr in ("message", "message_chain"):
@@ -428,6 +440,188 @@ def _replace_event_message_with_plain_text(event: AstrMessageEvent, text: str) -
             setattr(message_obj, "message_chain", chain.copy())
         if hasattr(message_obj, "raw_message"):
             setattr(message_obj, "raw_message", text)
+
+
+def _looks_like_audio_reference(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    text = value.strip().lower()
+    if not text:
+        return False
+    audio_exts = SUPPORTED_AUDIO_EXTS | TRANSCODE_HINT_EXTS
+    if text.startswith("base64://"):
+        return True
+    if any(text.endswith(ext) for ext in audio_exts):
+        return True
+    return any(f"{ext}]" in text or f"{ext})" in text for ext in audio_exts)
+
+
+def _content_type(value: Any) -> str:
+    value_type = value.get("type", "") if isinstance(value, dict) else getattr(value, "type", "")
+    type_value = getattr(value_type, "value", value_type)
+    return str(type_value).strip().lower()
+
+
+def _object_to_sanitizable_dict(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, (dict, list, str, bytes, bytearray)) or value is None:
+        return None
+
+    dumped = None
+    for method_name in ("model_dump_for_context", "model_dump", "dict"):
+        method = getattr(value, method_name, None)
+        if callable(method):
+            try:
+                dumped = method()
+            except Exception:
+                dumped = None
+            if isinstance(dumped, dict):
+                return dumped
+
+    data: dict[str, Any] = {}
+    for attr in (
+        "type",
+        "text",
+        "content",
+        "message",
+        "message_chain",
+        "raw_message",
+        "audio_url",
+        "audio_urls",
+        "url",
+        "file",
+        "path",
+        "data",
+    ):
+        if hasattr(value, attr):
+            data[attr] = getattr(value, attr)
+    return data or None
+
+
+def _sanitize_content_value(value: Any, fallback_text: str) -> Any:
+    if isinstance(value, list):
+        cleaned = []
+        for item in value:
+            item_cleaned = _sanitize_content_value(item, fallback_text)
+            if item_cleaned is not None:
+                cleaned.append(item_cleaned)
+        return cleaned
+
+    if isinstance(value, dict):
+        value_type = _content_type(value)
+        if value_type in {"audio", "audio_url", "input_audio", "file", "record"}:
+            return None
+        if _is_record_component(value):
+            return None
+
+        cleaned: dict[Any, Any] = {}
+        for key, item in value.items():
+            key_text = str(key).lower()
+            if key_text in {
+                "audio",
+                "audio_url",
+                "audio_urls",
+                "audios",
+                "file",
+                "file_url",
+                "file_urls",
+                "files",
+                "path",
+                "record",
+                "records",
+            } and _looks_like_audio_reference(item):
+                continue
+            if key_text in {"message", "message_chain", "raw_message"}:
+                cleaned[key] = fallback_text if key_text == "raw_message" else _plain_message_chain(fallback_text)
+                continue
+            item_cleaned = _sanitize_content_value(item, fallback_text)
+            if item_cleaned is not None:
+                cleaned[key] = item_cleaned
+        if cleaned.get("type") == "text" and not str(cleaned.get("text", "")).strip():
+            return None
+        if not cleaned and value_type:
+            return None
+        return cleaned
+
+    if _is_record_component(value):
+        return None
+    object_dict = _object_to_sanitizable_dict(value)
+    if object_dict is not None:
+        return _sanitize_content_value(object_dict, fallback_text)
+    if _looks_like_audio_reference(value):
+        return None
+    return value
+
+
+def _sanitize_content_parts(parts: Any, fallback_text: str) -> list[Any]:
+    if not isinstance(parts, list):
+        return []
+    cleaned = []
+    for part in parts:
+        sanitized = _sanitize_content_value(part, fallback_text)
+        if sanitized is not None:
+            cleaned.append(sanitized)
+    return cleaned
+
+
+def _sanitize_provider_request(req: ProviderRequest, memory_text: str, llm_text: str) -> None:
+    if hasattr(req, "audio_urls"):
+        req.audio_urls = []
+
+    for attr in (
+        "audios",
+        "content",
+        "contexts",
+        "extra_user_content_parts",
+        "files",
+        "file_urls",
+        "input",
+        "message",
+        "messages",
+    ):
+        value = getattr(req, attr, None)
+        if isinstance(value, list):
+            setattr(req, attr, _sanitize_content_parts(value, memory_text))
+        elif isinstance(value, dict):
+            setattr(req, attr, _sanitize_content_value(value, memory_text))
+        elif _looks_like_audio_reference(value) or _is_record_component(value):
+            setattr(req, attr, None)
+
+    prompt = getattr(req, "prompt", None)
+    if isinstance(prompt, str) and _looks_like_audio_reference(prompt):
+        req.prompt = llm_text
+
+
+def _sanitize_event_cached_content(event: AstrMessageEvent, text: str) -> None:
+    containers = []
+    seen_containers: set[int] = set()
+    for owner in (event, getattr(event, "message_obj", None)):
+        if owner is None:
+            continue
+        for attr in ("extras", "_extras", "extra"):
+            container = getattr(owner, attr, None)
+            if isinstance(container, dict) and id(container) not in seen_containers:
+                seen_containers.add(id(container))
+                containers.append(container)
+
+    for container in containers:
+        for key in list(container):
+            key_text = str(key).lower()
+            if key_text.startswith("volcengine_asr_"):
+                continue
+            if key_text in {
+                "content",
+                "context",
+                "contexts",
+                "input",
+                "message",
+                "message_chain",
+                "messages",
+                "raw_message",
+                "request",
+            }:
+                container[key] = _sanitize_content_value(container[key], text)
+            elif key_text in {"audio", "audio_url", "audio_urls", "audios", "file", "files", "record", "records"}:
+                container[key] = []
 
 
 def _set_event_extras(event: AstrMessageEvent, extras: dict[str, Any]) -> None:
@@ -1140,6 +1334,8 @@ class VolcengineAsrPlugin(Star):
         if not memory_text or not llm_text:
             return
         _replace_event_message_with_plain_text(event, memory_text)
+        _sanitize_event_cached_content(event, memory_text)
+        _sanitize_provider_request(req, memory_text, llm_text)
 
         prompt = getattr(req, "prompt", "")
         if not isinstance(prompt, str):
@@ -1525,6 +1721,7 @@ class VolcengineAsrPlugin(Star):
         unclear: bool = False,
     ) -> None:
         _replace_event_message_with_plain_text(event, memory_text)
+        _sanitize_event_cached_content(event, memory_text)
         _set_event_extras(
             event,
             {
