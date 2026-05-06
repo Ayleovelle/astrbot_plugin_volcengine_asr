@@ -1,5 +1,14 @@
 # 更新说明
 
+## v2.1.6 - 加固异形缓存 Record 发现
+
+### 主要变更
+
+- `_find_records()` 现在会额外扫描 `event.extras`、`event._extras`、`event.extra` 以及 `message_obj` 上的同名缓存容器。
+- 当适配器或其它插件把 OneBot / NapCat `Record(file="xxx.amr")` 藏在 `request`、`input`、`messages`、`content` 等缓存字段里时，本插件也能发现并接管语音。
+- 新增回归测试覆盖 extras / message_obj.extras 中的嵌套 record 结构，降低旧语音段漏进 `agent_sub_stages` 的风险。
+- 本版本不做 AstrBot 私有 pipeline monkey patch。AstrBot v4.24.2 的官方 `preprocess_stage` 仍位于插件 handler 之前；若只剩该 warning，请继续按 Docker / NapCat 共享卷和 `get_record` 路径排查。
+
 ## v2.1.5 - 增强 Docker / NapCat / 官方预处理排障信息
 
 ### 主要变更

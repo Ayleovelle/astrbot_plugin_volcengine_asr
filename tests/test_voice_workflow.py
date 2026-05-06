@@ -384,6 +384,22 @@ def test_find_records_reads_nested_napcat_onebot_shapes():
     assert VolcengineAsrPlugin._find_records(event) == [record_a, record_b, record_c]
 
 
+def test_find_records_reads_event_and_message_obj_extra_caches():
+    event = _FakeEvent()
+    event.message = []
+    event.message_chain = []
+    event.raw_message = []
+    event.message_obj.message = []
+    event.message_obj.message_chain = []
+    event.message_obj.raw_message = []
+    record_a = {"type": "record", "data": {"file": "from-event-extras.amr"}}
+    record_b = {"type": "record", "data": {"file": "from-message-extras.amr"}}
+    event.extras["request"] = {"messages": [{"content": [record_a]}]}
+    event.message_obj.extras["input"] = {"message": [record_b]}
+
+    assert VolcengineAsrPlugin._find_records(event) == [record_b, record_a]
+
+
 def test_build_audio_payload_url_mode_does_not_trust_amr_url():
     plugin = _make_plugin(submit_mode="url")
     record = Comp.Record(url="https://example.com/voice.amr")

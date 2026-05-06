@@ -42,7 +42,7 @@ VOLC_FLASH_ENDPOINT = (
 VOLC_RESOURCE_ID = "volc.bigasr.auc_turbo"
 VOLC_SUCCESS_CODE = "20000000"
 VOLC_SILENT_AUDIO_CODE = "20000003"
-PLUGIN_VERSION = "2.1.5"
+PLUGIN_VERSION = "2.1.6"
 PLUGIN_REPO_URL = "https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr"
 SUPPORTED_AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".opus"}
 TRANSCODE_HINT_EXTS = {".amr", ".silk", ".slk", ".m4a", ".aac", ".flac", ".webm"}
@@ -525,7 +525,7 @@ def _message_chain_items(chain: Any) -> list[Any]:
         return []
 
 
-def _iter_message_chains(event: AstrMessageEvent) -> list[Any]:
+def _iter_message_chains(event: AstrMessageEvent, *, include_extra_caches: bool = True) -> list[Any]:
     chains: list[Any] = []
     seen: set[int] = set()
     visited: set[int] = set()
@@ -583,10 +583,20 @@ def _iter_message_chains(event: AstrMessageEvent) -> list[Any]:
         append_chain(getattr(message_obj, "message", None))
         append_chain(getattr(message_obj, "message_chain", None))
         append_chain(getattr(message_obj, "raw_message", None))
+        if include_extra_caches:
+            for attr in ("extras", "_extras", "extra"):
+                extra_container = getattr(message_obj, attr, None)
+                if isinstance(extra_container, dict):
+                    append_chain(extra_container, 1)
 
     append_chain(getattr(event, "message", None))
     append_chain(getattr(event, "message_chain", None))
     append_chain(getattr(event, "raw_message", None))
+    if include_extra_caches:
+        for attr in ("extras", "_extras", "extra"):
+            extra_container = getattr(event, attr, None)
+            if isinstance(extra_container, dict):
+                append_chain(extra_container, 1)
 
     get_messages = getattr(event, "get_messages", None)
     if callable(get_messages):
@@ -599,7 +609,7 @@ def _iter_message_chains(event: AstrMessageEvent) -> list[Any]:
 
 
 def _mutate_message_chains_to_plain_text(event: AstrMessageEvent, text: str) -> None:
-    for old_chain in _iter_message_chains(event):
+    for old_chain in _iter_message_chains(event, include_extra_caches=False):
         replacement = _plain_message_chain(text)
         for attr in ("chain", "message", "message_chain"):
             nested_chain = getattr(old_chain, attr, None)
