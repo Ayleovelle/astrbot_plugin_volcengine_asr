@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.1.0-brightgreen.svg" alt="Version 2.1.0">
+  <img src="https://img.shields.io/badge/Version-2.1.1-brightgreen.svg" alt="Version 2.1.1">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License MIT">
@@ -117,6 +117,14 @@ VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest
 - 识别失败、直接回复转写、配置错误这类不需要默认 LLM 继续处理原语音的路径，仍按配置或错误状态阻断事件，避免旧 `Record` 继续流转。
 - 默认继续推荐 `submit_mode=base64`：先由 AstrBot 所在机器读取、下载或转码，再提交给火山引擎，避免临时 URL、内网 URL、NapCat raw silk URL 被火山侧直接访问失败。
 - `submit_mode=url` 只会直传明确属于 `.wav` / `.mp3` / `.ogg` / `.opus` 的 HTTP(S) URL；`.amr` / `.silk` 这类 QQ 语音会回落到下载、转码和 Base64 上传。
+
+## 2.1.1 语音 Record 清理修复
+
+`2.1.1` 继续收紧语音残留清理边界，重点修复情绪判断和直接回复路径可能让旧 `Record(file="xxx.amr")` 继续进入 agent 的问题。
+
+- 情绪判断前会先清理当前语音 `Record`，再把转写文本和可用上下文交给情绪判断 LLM。
+- 识别失败、配置错误、未听清直接提示、`reply_transcription=true` 直接回复转写等不需要默认 LLM 继续处理原语音的路径，会先 `stop_event()`，再发送回复。
+- 这样可以避免后续 agent 或媒体转换逻辑继续读取裸 `.amr` 文件名，减少 `not a valid file: xxx.amr`。
 
 ## 重建后的语音工作流
 
@@ -331,7 +339,7 @@ emotion_fail_open = true
 说明：
 
 - `emotion_model_id` 留空时，插件会尝试使用当前会话的主 LLM 作为情绪判断 LLM。
-- 如果后续 AstrBot 暴露可稳定枚举的模型列表，可以在这里填写指定模型 ID，让情绪判断走更便宜或更快的模型。
+- `emotion_model_id` 在 AstrBot WebUI 中支持点击选择已配置模型；留空时使用当前会话默认模型。
 - `emotion_max_respect_weight_percent` 建议保持在 `30-70`。它不是情绪置信度，而是“主 LLM 最多应该在多大程度上参考情绪判断”的上限。
 - `emotion_fail_open=true` 时，即使情绪判断模型超时、报错或输出 JSON 不合法，语音转写仍会按原流程进入主 LLM。
 
@@ -514,8 +522,8 @@ max_respect_weight = 0.60
 
 `emotion_model_id` 是预留的模型选择接口：
 
-- 留空：使用当前会话主 LLM。
-- 填写模型 ID：尝试使用指定 AstrBot 模型。
+- 留空：使用当前会话默认模型。
+- 在 AstrBot WebUI 中点击选择已配置模型：尝试使用指定 AstrBot 模型。
 - 当前 AstrBot 环境不支持指定模型或 LLM 调用失败：按 `emotion_fail_open` 决定是否跳过。
 
 推荐做法：
@@ -777,14 +785,16 @@ Error occurred while processing agent: not a valid file: d288c78e8c3716a65e75983
 
 通常不是火山 ASR 不支持 AMR，而是消息在识别成功后继续流向 agent 阶段时，旧消息链里还残留了 OneBot / NapCat 的 `Record(file="xxx.amr")`。这类 `file` 很多时候只是平台临时文件名，不是 AstrBot 机器上的真实本地路径，所以后续组件把它当文件校验时会报错。
 
-`2.0.3` 继续加固了这条链路：
+`2.1.1` 继续加固了这条链路：
 
+- 情绪判断前会先清理当前语音 `Record`，避免情绪判断路径把旧 `.amr` 残留带到后续 agent。
+- 识别失败、配置错误、未听清直接提示、`reply_transcription=true` 直接回复转写等直接回复路径，会先 `stop_event()` 再发送回复，避免默认 agent 继续处理原语音。
 - 识别成功或未听清注入时，会把 `event.message`、`event.message_chain`、`event.raw_message`、`message_obj.message`、`message_obj.message_chain`、`message_obj.raw_message` 等常见入口同步替换为纯 `Plain` 文本。
 - 替换前会先原地改写旧消息链 list。即使 AstrBot 或其他插件已经持有旧 list 引用，也会看到纯文本，而不是旧 `Record(file="xxx.amr")`。
 - LLM 请求阶段会清空 `ProviderRequest.audio_urls`，并净化 `contexts`、`extra_user_content_parts`、`messages`、`content`、`files` 等可能残留音频附件的字段。
 - 语音段查找兼容 `message`、`message_chain`、`raw_message`、裸 OneBot `record` dict 以及嵌套 dict 形态。
 
-如果你仍然看到这个错误，请先确认安装的是 Release 页面中的 `2.0.3` 或更高版本 zip，并重启 AstrBot。然后检查平台是否只提供了裸文件名、没有可下载 URL 或 base64 数据；这种情况下插件会尽量走 `convert_to_base64()`，但平台适配器本身也需要能取得原语音内容。
+如果你仍然看到这个错误，请先确认安装的是 Release 页面中的 `2.1.1` 或更高版本 zip，并重启 AstrBot。然后检查平台是否只提供了裸文件名、没有可下载 URL 或 base64 数据；这种情况下插件会尽量走 `convert_to_base64()`，但平台适配器本身也需要能取得原语音内容。
 
 ### URL 模式失败
 
@@ -961,11 +971,13 @@ python3 scripts/build_release_zip.py
 
 ## 版本说明
 
-当前版本：`2.1.0`
+当前版本：`2.1.1`
 
 本版本重点：
 
 - 重新构建语音工作流：`VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest`。
+- 情绪判断前先清理语音 `Record`，直接回复和失败路径先 `stop_event()` 再回复，避免 `not a valid file: xxx.amr`。
+- `emotion_model_id` 在 WebUI 中支持点击选择已配置模型；留空时使用当前会话默认模型。
 - 成功识别后，消息阶段只写入干净 `Plain` 文本，LLM 请求阶段再应用语音提示词和情绪辅助。
 - `ProviderRequest` 阶段继续清理音频残留，并在找不到原始转写文本时前置 `llm_text`、保留原 prompt，避免丢失 LivingMemory 或 provider 上下文。
 - `submit_mode=url` 不再信任 `.amr` / `.silk` 这类 QQ 语音 URL，会回落到下载、转码和 Base64 上传。

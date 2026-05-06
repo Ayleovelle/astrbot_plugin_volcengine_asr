@@ -331,7 +331,15 @@ def _is_record_component(component: Any) -> bool:
         return str(type_value).lower() == "record"
     component_type = getattr(component, "type", "")
     type_value = getattr(component_type, "value", component_type)
-    return str(type_value).lower() == "record"
+    if str(type_value).lower() == "record":
+        return True
+
+    if component.__class__.__name__.lower() != "record":
+        return False
+    for attr in ("base64", "path", "file", "url", "data"):
+        if getattr(component, attr, None):
+            return True
+    return False
 
 
 def _extract_record_sources(record: Any) -> list[str]:
@@ -457,17 +465,46 @@ def _plain_message_chain(text: str) -> list[Any]:
 def _iter_message_chains(event: AstrMessageEvent) -> list[Any]:
     chains: list[Any] = []
     seen: set[int] = set()
+    visited: set[int] = set()
 
-    def append_chain(chain: Any) -> None:
-        if isinstance(chain, list) and id(chain) not in seen:
-            seen.add(id(chain))
-            chains.append(chain)
-        elif _is_record_component(chain) and id(chain) not in seen:
-            seen.add(id(chain))
-            chains.append([chain])
+    def append_chain(chain: Any, depth: int = 0) -> None:
+        if chain is None or depth > 8:
+            return
+        chain_id = id(chain)
+        if isinstance(chain, (list, dict)) and chain_id in visited:
+            return
+        if isinstance(chain, (list, dict)):
+            visited.add(chain_id)
+
+        if isinstance(chain, list):
+            if chain_id not in seen:
+                seen.add(chain_id)
+                chains.append(chain)
+            for item in list(chain):
+                if isinstance(item, (list, dict)) or _is_record_component(item):
+                    append_chain(item, depth + 1)
+        elif _is_record_component(chain):
+            if chain_id not in seen:
+                seen.add(chain_id)
+                chains.append([chain])
         elif isinstance(chain, dict):
-            for key in ("message", "message_chain", "raw_message"):
-                append_chain(chain.get(key))
+            preferred_keys = (
+                "message",
+                "message_chain",
+                "raw_message",
+                "data",
+                "segments",
+                "original_message",
+                "content",
+            )
+            for key in preferred_keys:
+                if key in chain:
+                    append_chain(chain.get(key), depth + 1)
+            for key, value in chain.items():
+                if key in preferred_keys:
+                    continue
+                if isinstance(value, (list, dict)) or _is_record_component(value):
+                    append_chain(value, depth + 1)
 
     message_obj = getattr(event, "message_obj", None)
     if message_obj is not None:
@@ -527,7 +564,9 @@ def _looks_like_audio_reference(value: Any) -> bool:
     audio_exts = SUPPORTED_AUDIO_EXTS | TRANSCODE_HINT_EXTS
     if text.startswith("base64://"):
         return True
-    if any(text.endswith(ext) for ext in audio_exts):
+    parsed_path = urlparse(text).path if text.startswith(("http://", "https://")) else text
+    parsed_path = unquote(parsed_path)
+    if any(parsed_path.endswith(ext) for ext in audio_exts):
         return True
     return any(f"{ext}]" in text or f"{ext})" in text for ext in audio_exts)
 
@@ -708,6 +747,28 @@ def _sanitize_event_cached_content(event: AstrMessageEvent, text: str) -> None:
 def _set_event_extras(event: AstrMessageEvent, extras: dict[str, Any]) -> None:
     for key, value in extras.items():
         event.set_extra(key, value)
+
+
+def _stop_voice_event_with_plain_text(
+    event: AstrMessageEvent,
+    text: str,
+    *,
+    diagnostics: list[dict[str, Any]] | None = None,
+) -> None:
+    fallback_text = (text or DEFAULT_UNCLEAR_MEMORY_TEXT).strip() or DEFAULT_UNCLEAR_MEMORY_TEXT
+    _replace_event_message_with_plain_text(event, fallback_text)
+    _sanitize_event_cached_content(event, fallback_text)
+    extras = {
+        ASR_EXTRA_TEXT: fallback_text,
+        ASR_EXTRA_MEMORY_TEXT: fallback_text,
+        ASR_EXTRA_LLM_TEXT: fallback_text,
+        ASR_EXTRA_INJECTED: False,
+        ASR_EXTRA_UNCLEAR: fallback_text == DEFAULT_UNCLEAR_MEMORY_TEXT,
+    }
+    if diagnostics:
+        extras[ASR_EXTRA_DIAGNOSTICS] = diagnostics
+    _set_event_extras(event, extras)
+    event.stop_event()
 
 
 def _read_json_file(path: Path) -> dict[str, Any]:
@@ -1393,20 +1454,23 @@ class VolcengineAsrPlugin(Star):
     @filter.event_message_type(filter.EventMessageType.ALL, priority=10)
     async def on_message(self, event: AstrMessageEvent):
         """自动识别消息中的语音段，并将事件改写为干净转写文本。"""
-        if not self.auto_recognize or not self._allow_event(event):
+        if not self.auto_recognize:
             return
 
         voice_inputs = self._collect_voice_inputs(event)
         if not voice_inputs:
             return
 
+        if not self._allow_event(event):
+            _stop_voice_event_with_plain_text(event, DEFAULT_UNCLEAR_MEMORY_TEXT)
+            return
+
         config_error = self.client.validate()
         if config_error:
             logger.warning(config_error)
+            _stop_voice_event_with_plain_text(event, config_error)
             if self.notify_config_error:
                 yield event.plain_result(config_error)
-            if self.stop_event_after_recognition:
-                event.stop_event()
             return
 
         batch = await self._recognize_voice_inputs(voice_inputs)
@@ -1419,10 +1483,6 @@ class VolcengineAsrPlugin(Star):
         if inject_mode and results:
             transcription_text = self._build_transcription_text(results)
             llm_text = self._build_llm_user_text(results)
-            emotion_judgement = await self._analyze_emotion(event, transcription_text)
-            if emotion_judgement is not None:
-                event.set_extra(ASR_EXTRA_EMOTION_RESULT, emotion_judgement.to_dict())
-                llm_text = _append_emotion_guidance(llm_text, emotion_judgement)
             self._apply_voice_injection_plan(
                 event,
                 VoiceInjectionPlan(
@@ -1432,6 +1492,11 @@ class VolcengineAsrPlugin(Star):
                     diagnostics=batch.diagnostics,
                 ),
             )
+            emotion_judgement = await self._analyze_emotion(event, transcription_text)
+            if emotion_judgement is not None:
+                event.set_extra(ASR_EXTRA_EMOTION_RESULT, emotion_judgement.to_dict())
+                llm_text = _append_emotion_guidance(llm_text, emotion_judgement)
+                event.set_extra(ASR_EXTRA_LLM_TEXT, llm_text)
             logger.info(
                 "已将语音识别结果注入为干净用户输入，"
                 f"memory_text={transcription_text}, llm_text={llm_text}"
@@ -1462,13 +1527,19 @@ class VolcengineAsrPlugin(Star):
 
         reply = self._build_reply(results, errors)
         if reply:
+            _stop_voice_event_with_plain_text(
+                event,
+                self._build_transcription_text(results) if results else reply,
+                diagnostics=batch.diagnostics,
+            )
             yield event.plain_result(reply)
+            return
 
-        if results:
-            if self.stop_event_after_recognition:
-                event.stop_event()
-        elif errors:
-            event.stop_event()
+        _stop_voice_event_with_plain_text(
+            event,
+            DEFAULT_UNCLEAR_MEMORY_TEXT,
+            diagnostics=batch.diagnostics,
+        )
 
     async def terminate(self) -> None:
         await self.client.close()

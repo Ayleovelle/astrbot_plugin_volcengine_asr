@@ -126,10 +126,11 @@
     "hint": "默认关闭。开启后会在语音转写后额外请求一次 LLM，根据转写文本和可用上下文推测用户情绪，会增加 token 消耗、响应延迟和上下文暴露范围。"
   },
   "emotion_model_id": {
-    "description": "情绪判断模型 ID",
+    "description": "WebUI 点击选择模型，留空使用当前会话默认模型",
     "type": "string",
     "default": "",
-    "hint": "预留从 AstrBot 已配置模型中选择情绪判断模型；留空时使用当前会话的主 LLM。"
+    "_special": "select_provider",
+    "hint": "在 WebUI 中点击选择 AstrBot 已配置模型；留空时使用当前会话默认模型。"
   },
   "emotion_context_turns": {
     "description": "情绪判断上下文轮数",

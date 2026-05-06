@@ -5,6 +5,7 @@ import astrbot.api.message_components as Comp
 from astrbot_plugin_volcengine_asr.main import (
     ASR_EXTRA_DIAGNOSTICS,
     ASR_EXTRA_EMOTION_INTERNAL_CALL,
+    ASR_EXTRA_EMOTION_RESULT,
     ASR_EXTRA_INJECTED,
     ASR_EXTRA_LLM_TEXT,
     ASR_EXTRA_MEMORY_TEXT,
@@ -26,6 +27,7 @@ class _FakeEvent:
         self.raw_message = {"message": list(self.message)}
         self.stopped = 0
         self.replies = []
+        self.calls = []
         self.is_at_or_wake_command = True
         self.unified_msg_origin = "umo"
         self.message_obj = type("MessageObj", (), {})()
@@ -48,9 +50,11 @@ class _FakeEvent:
         return self.message_obj.message
 
     def stop_event(self):
+        self.calls.append("stop_event")
         self.stopped += 1
 
     def plain_result(self, text):
+        self.calls.append("plain_result")
         result = {"type": "plain_result", "text": text}
         self.replies.append(result)
         return result
@@ -120,6 +124,7 @@ def test_on_message_success_rebuilds_event_and_provider_request():
 
     assert outputs == []
     assert event.stopped == 0
+    assert event.calls == []
     assert event.message_str == "你好"
     assert event.message_obj.message_str == "你好"
     assert event.message[0].text == "你好"
@@ -138,6 +143,41 @@ def test_on_message_success_rebuilds_event_and_provider_request():
     assert req.files == []
     assert req.contexts == [{"role": "user", "content": [{"type": "text", "text": "上下文"}]}]
     assert req.extra_user_content_parts == [{"type": "text", "text": "保留"}]
+
+
+def test_on_message_cleans_record_before_emotion_llm_call():
+    record = Comp.Record(file="voice.amr")
+    event = _FakeEvent([record])
+    plugin = _make_plugin(enable_emotion_analysis=True)
+
+    async def fake_recognize_voice_inputs(_voice_inputs):
+        return RecognitionBatch(results=[AsrResult(text="我有点担心", request_id="req-1")], errors=[])
+
+    class _FakeContext:
+        async def get_current_chat_provider_id(self, umo=None):
+            assert umo == "umo"
+            return "provider-default"
+
+        async def llm_generate(self, **kwargs):
+            assert kwargs["chat_provider_id"] == "provider-default"
+            assert VolcengineAsrPlugin._find_records(event) == []
+            assert event.message_str == "我有点担心"
+            return (
+                '{"label":"anxious","emotion_weights":{"anxious":0.8,"neutral":0.2},'
+                '"confidence":0.7,"valence":-0.4,"arousal":0.6,'
+                '"voice_text_support":0.8,"context_support":0.2,"reason":"用户表达担心。"}'
+            )
+
+    plugin._recognize_voice_inputs = fake_recognize_voice_inputs
+    plugin.context = _FakeContext()
+
+    outputs = asyncio.run(_collect_asyncgen(plugin.on_message(event)))
+
+    assert outputs == []
+    assert event.stopped == 0
+    assert VolcengineAsrPlugin._find_records(event) == []
+    assert event.get_extra(ASR_EXTRA_EMOTION_RESULT)["label"] == "anxious"
+    assert "[情绪判断辅助信息]" in event.get_extra(ASR_EXTRA_LLM_TEXT)
 
 
 def test_apply_voice_prompt_template_takes_over_when_prompt_does_not_contain_memory_text():
@@ -186,6 +226,11 @@ def test_on_message_unclear_voice_injects_unclear_plan():
     assert outputs == []
     assert event.stopped == 0
     assert event.message_str == DEFAULT_UNCLEAR_MEMORY_TEXT
+    assert event.message[0].text == DEFAULT_UNCLEAR_MEMORY_TEXT
+    assert event.message_chain[0].text == DEFAULT_UNCLEAR_MEMORY_TEXT
+    assert event.message_obj.message[0].text == DEFAULT_UNCLEAR_MEMORY_TEXT
+    assert event.message_obj.message_chain[0].text == DEFAULT_UNCLEAR_MEMORY_TEXT
+    assert VolcengineAsrPlugin._find_records(event) == []
     assert event.get_extra(ASR_EXTRA_UNCLEAR) is True
     assert event.get_extra(ASR_EXTRA_INJECTED) is True
 
@@ -206,7 +251,9 @@ def test_on_message_reply_mode_stops_after_success_when_configured():
 
     assert outputs[0]["text"] == "语音转文字：你好"
     assert event.stopped == 1
-    assert event.get_extra(ASR_EXTRA_INJECTED) is None
+    assert event.calls[:2] == ["stop_event", "plain_result"]
+    assert VolcengineAsrPlugin._find_records(event) == []
+    assert event.get_extra(ASR_EXTRA_INJECTED) is False
 
 
 def test_on_message_error_stops_to_prevent_old_record_from_reaching_agent():
@@ -222,7 +269,53 @@ def test_on_message_error_stops_to_prevent_old_record_from_reaching_agent():
 
     assert "ffmpeg 启动失败" in outputs[0]["text"]
     assert event.stopped == 1
-    assert event.get_extra(ASR_EXTRA_INJECTED) is None
+    assert event.calls[:2] == ["stop_event", "plain_result"]
+    assert VolcengineAsrPlugin._find_records(event) == []
+    assert event.get_extra(ASR_EXTRA_INJECTED) is False
+
+
+def test_on_message_config_error_stops_before_plain_result():
+    event = _FakeEvent([Comp.Record(file="voice.amr")])
+    plugin = _make_plugin(api_key="", app_key="", access_key="")
+
+    outputs = asyncio.run(_collect_asyncgen(plugin.on_message(event)))
+
+    assert outputs
+    assert event.stopped == 1
+    assert event.calls[:2] == ["stop_event", "plain_result"]
+    assert VolcengineAsrPlugin._find_records(event) == []
+
+
+def test_on_message_disallowed_voice_event_stops_and_cleans_record():
+    event = _FakeEvent([Comp.Record(file="voice.amr")])
+    event.is_at_or_wake_command = False
+    plugin = _make_plugin(only_when_at_or_wake=True)
+
+    outputs = asyncio.run(_collect_asyncgen(plugin.on_message(event)))
+
+    assert outputs == []
+    assert event.stopped == 1
+    assert event.calls == ["stop_event"]
+    assert event.message_str == DEFAULT_UNCLEAR_MEMORY_TEXT
+    assert VolcengineAsrPlugin._find_records(event) == []
+
+
+def test_find_records_reads_nested_napcat_onebot_shapes():
+    event = _FakeEvent()
+    record_a = {"type": "record", "data": {"file": "from-data-message.amr"}}
+    record_b = {"type": "record", "data": {"file": "from-segments.amr"}}
+    record_c = {"type": "record", "data": {"file": "from-original.amr"}}
+    event.message = []
+    event.message_chain = []
+    event.message_obj.message = []
+    event.message_obj.message_chain = []
+    event.raw_message = {
+        "data": {"message": [record_a]},
+        "segments": [record_b],
+        "original_message": [record_c],
+    }
+
+    assert VolcengineAsrPlugin._find_records(event) == [record_a, record_b, record_c]
 
 
 def test_build_audio_payload_url_mode_does_not_trust_amr_url():

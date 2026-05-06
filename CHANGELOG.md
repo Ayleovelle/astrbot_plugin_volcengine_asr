@@ -1,5 +1,15 @@
 # 更新说明
 
+## v2.1.1 - 清理情绪判断与直接回复路径的语音残留
+
+### 主要变更
+
+- 情绪判断前先清理当前语音 `Record`，避免情绪判断 LLM 路径把旧 `Record(file="xxx.amr")` 带入后续 agent。
+- 识别失败、配置错误、未听清直接提示、`reply_transcription=true` 直接回复转写等路径，先 `stop_event()` 再发送回复，避免默认 LLM / agent 继续处理原语音。
+- 修复直接回复或失败路径仍可能触发 `not a valid file: xxx.amr` 的问题。
+- `emotion_model_id` 配置增加 `_special: select_provider`，AstrBot WebUI 可点击选择已配置模型；留空时使用当前会话默认模型。
+- README 同步补充 v2.1.1 行为说明、模型选择说明和 `not a valid file: xxx.amr` 排障提示。
+
 ## v2.1.0 - 重新构建语音工作流
 
 ### 主要变更

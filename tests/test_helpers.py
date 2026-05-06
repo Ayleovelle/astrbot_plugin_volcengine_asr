@@ -288,6 +288,36 @@ def test_find_records_reads_compatible_message_chains():
     ]
 
 
+def test_find_records_reads_nested_napcat_onebot_shapes():
+    event = _FakeEvent()
+    event.message = []
+    event.message_chain = []
+    event.message_obj.message = []
+    event.message_obj.message_chain = []
+    record_a = {"type": "record", "data": {"file": "from-data-message.amr"}}
+    record_b = {"type": "record", "data": {"file": "from-segments.amr"}}
+    record_c = {"type": "record", "data": {"file": "from-original.amr"}}
+    event.raw_message = {
+        "data": {"message": [record_a]},
+        "segments": [record_b],
+        "original_message": [record_c],
+    }
+
+    assert VolcengineAsrPlugin._find_records(event) == [record_a, record_b, record_c]
+
+
+def test_find_records_supports_core_record_duck_typing():
+    class Record:
+        def __init__(self):
+            self.file = "core-record.amr"
+
+    event = _FakeEvent()
+    record = Record()
+    event.message_obj.message = [record]
+
+    assert VolcengineAsrPlugin._find_records(event) == [record]
+
+
 def test_find_records_reads_bare_raw_record_dict():
     event = _FakeEvent()
     raw_record = {"type": "record", "data": {"file": "raw.amr"}}
@@ -497,6 +527,10 @@ def test_inject_user_text_sanitizes_cached_extra_records():
 
 def test_sanitize_provider_request_removes_audio_inputs_and_preserves_text():
     req = _FakeProviderRequest()
+    req.metadata = {
+        "file_urls": ["https://example.com/voice.amr?token=secret"],
+        "text": "保留",
+    }
 
     _sanitize_provider_request(req, "干净文本", "LLM 文本")
 
@@ -505,6 +539,7 @@ def test_sanitize_provider_request_removes_audio_inputs_and_preserves_text():
     assert req.extra_user_content_parts == [{"type": "text", "text": "保留额外文字"}]
     assert req.messages == [{"role": "user", "content": [{"type": "text", "text": "保留 message 文字"}]}]
     assert req.files == []
+    assert req.metadata == {"file_urls": [], "text": "保留"}
 
 
 def test_sanitize_provider_request_removes_object_audio_parts():
