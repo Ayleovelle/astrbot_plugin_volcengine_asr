@@ -14,12 +14,14 @@ from astrbot_plugin_volcengine_asr.main import (
     _detect_audio_suffix,
     _entropy_certainty,
     _estimate_base64_size,
+    _extract_record_sources,
     _normalize_emotion_weights,
     _render_named_placeholders,
     _render_prompt_template,
     _replace_first_text,
     _safe_parse_json_object,
 )
+import astrbot.api.message_components as Comp
 from scripts.update_fuck_u_code_score import build_svg, extract_score, find_score, normalize_score
 
 
@@ -27,13 +29,28 @@ class _FakeEvent:
     def __init__(self):
         self.extras = {}
         self.message_str = ""
-        self.message_obj = type("MessageObj", (), {"message_str": "", "message": []})()
+        self.message = []
+        self.message_chain = []
+        self.raw_message = []
+        self.message_obj = type(
+            "MessageObj",
+            (),
+            {
+                "message_str": "",
+                "message": [],
+                "message_chain": [],
+                "raw_message": [],
+            },
+        )()
 
     def set_extra(self, key, value):
         self.extras[key] = value
 
     def get_extra(self, key, default=None):
         return self.extras.get(key, default)
+
+    def get_messages(self):
+        return self.message_obj.message
 
 
 def test_render_prompt_template_supports_angle_placeholder_with_braces_text():
@@ -82,6 +99,49 @@ def test_estimate_base64_size_handles_padding():
     assert _estimate_base64_size("TQ==") == 1
     assert _estimate_base64_size("TWE=") == 2
     assert _estimate_base64_size("TWFu") == 3
+
+
+def test_extract_record_sources_supports_object_dict_and_nested_data():
+    record = Comp.Record(file="voice.amr", url="https://example.com/voice.amr")
+    nested_object = Comp.Record(data={"path": "/tmp/voice.silk", "file": "nested.amr"})
+    nested_dict = {
+        "type": "record",
+        "data": {"url": "https://example.com/nested.amr", "file": "fallback.amr"},
+    }
+
+    assert _extract_record_sources(record) == [
+        "https://example.com/voice.amr",
+        "voice.amr",
+    ]
+    assert _extract_record_sources(nested_object) == ["/tmp/voice.silk", "nested.amr"]
+    assert _extract_record_sources(nested_dict) == [
+        "https://example.com/nested.amr",
+        "fallback.amr",
+    ]
+
+
+def test_find_records_reads_compatible_message_chains():
+    event = _FakeEvent()
+    main_record = Comp.Record(file="message.amr")
+    obj_chain_record = Comp.Record(file="message-chain.amr")
+    event_chain_record = Comp.Record(file="event-chain.amr")
+    raw_nested_record = {"type": "record", "data": {"file": "raw-nested.amr"}}
+    raw_dict_record = {"type": "record", "data": {"file": "raw.amr"}}
+
+    event.message_obj.message = [main_record]
+    event.message_obj.message_chain = [obj_chain_record]
+    event.message_chain = [event_chain_record]
+    event.raw_message = {"message": [raw_nested_record], "raw_message": [raw_dict_record]}
+
+    records = VolcengineAsrPlugin._find_records(event)
+
+    assert records == [
+        main_record,
+        obj_chain_record,
+        event_chain_record,
+        raw_nested_record,
+        raw_dict_record,
+    ]
 
 
 def test_safe_parse_json_object_handles_raw_and_fenced_json():
@@ -217,6 +277,14 @@ def test_build_result_values_reuses_transcription_formatting():
 
 def test_inject_user_text_sets_clean_message_and_asr_extras():
     event = _FakeEvent()
+    record = Comp.Record(file="d288c78e8c3716a65e75983adcdd4a5a.amr")
+    raw_record = {"type": "record", "data": {"file": "raw.amr"}}
+    event.message = [record]
+    event.message_chain = [record]
+    event.raw_message = [raw_record]
+    event.message_obj.message = [record]
+    event.message_obj.message_chain = [record]
+    event.message_obj.raw_message = [raw_record]
 
     VolcengineAsrPlugin._inject_user_text(
         event,
@@ -227,8 +295,14 @@ def test_inject_user_text_sets_clean_message_and_asr_extras():
     )
 
     assert event.message_str == "干净文本"
+    assert event.message[0].text == "干净文本"
+    assert event.message_chain[0].text == "干净文本"
+    assert event.raw_message == "干净文本"
     assert event.message_obj.message_str == "干净文本"
     assert event.message_obj.message[0].text == "干净文本"
+    assert event.message_obj.message_chain[0].text == "干净文本"
+    assert event.message_obj.raw_message == "干净文本"
+    assert VolcengineAsrPlugin._find_records(event) == []
     assert event.extras[ASR_EXTRA_TEXT] == "原始文本"
     assert event.extras[ASR_EXTRA_MEMORY_TEXT] == "干净文本"
     assert event.extras[ASR_EXTRA_LLM_TEXT] == "LLM 文本"

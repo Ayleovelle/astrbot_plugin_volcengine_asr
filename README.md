@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.0.1-brightgreen.svg" alt="Version 2.0.1">
+  <img src="https://img.shields.io/badge/Version-2.0.2-brightgreen.svg" alt="Version 2.0.2">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License MIT">
@@ -731,6 +731,24 @@ ffmpeg_path = /usr/bin/ffmpeg
 
 路径按你的实际系统修改。
 
+### Agent 阶段报 not a valid file: xxx.amr
+
+如果 AstrBot 日志中出现类似：
+
+```text
+Error occurred while processing agent: not a valid file: d288c78e8c3716a65e75983adcdd4a5a.amr
+```
+
+通常不是火山 ASR 不支持 AMR，而是消息在识别成功后继续流向 agent 阶段时，旧消息链里还残留了 OneBot / NapCat 的 `Record(file="xxx.amr")`。这类 `file` 很多时候只是平台临时文件名，不是 AstrBot 机器上的真实本地路径，所以后续组件把它当文件校验时会报错。
+
+`2.0.2` 已修复这条链路：
+
+- 识别成功或未听清注入时，会把 `event.message`、`event.message_chain`、`event.raw_message`、`message_obj.message`、`message_obj.message_chain`、`message_obj.raw_message` 等常见入口同步替换为纯 `Plain` 文本。
+- LLM 请求阶段会再次确认消息链是干净文本，避免后续 agent 从残留链里重新读到 `.amr`。
+- 语音段查找也兼容 `message`、`message_chain`、`raw_message` 以及 OneBot dict 形态。
+
+如果你仍然看到这个错误，请先确认安装的是 Release 页面中的 `2.0.2` 或更高版本 zip，并重启 AstrBot。然后检查平台是否只提供了裸文件名、没有可下载 URL 或 base64 数据；这种情况下插件会尽量走 `convert_to_base64()`，但平台适配器本身也需要能取得原语音内容。
+
 ### URL 模式失败
 
 大多数 OneBot / NapCat 语音 URL 是内网地址、临时地址，或需要 AstrBot 所在机器携带上下文访问。火山引擎服务器通常无法直接访问这些 URL。
@@ -875,11 +893,11 @@ PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q -p no:cache
 python3 scripts/build_release_zip.py
 ```
 
-发布时只上传 `output/astrbot_plugin_volcengine_asr.zip`。根目录旧 zip、`_release_body.json`、`_release_draft.json` 都不是 2.0.1 的发布依据。
+发布时只上传 `output/astrbot_plugin_volcengine_asr.zip`。根目录旧 zip、`_release_body.json`、`_release_draft.json` 都不是 2.0.2 的发布依据。
 
 ## Web UI 接口预留
 
-2.0.1 先不把完整 Web UI 合进 `main`，但已经为后续独立 Web UI 分支预留稳定后端接口。未来插件配置页、状态页、情绪计算可视化，都应优先调用这些方法，而不是直接读取插件内部属性。
+2.0.2 先不把完整 Web UI 合进 `main`，但已经为后续独立 Web UI 分支预留稳定后端接口。未来插件配置页、状态页、情绪计算可视化，都应优先调用这些方法，而不是直接读取插件内部属性。
 
 | 接口 | 用途 |
 | :--- | :--- |
@@ -906,13 +924,14 @@ python3 scripts/build_release_zip.py
 
 ## 版本说明
 
-当前版本：`2.0.1`
+当前版本：`2.0.2`
 
 本版本重点：
 
-- 修复部分 AstrBot 仓库安装模式下根目录入口找不到插件包的问题。
-- 修正 WebUI 链接安装说明，明确必须使用完整 `https://github.com/...` 地址。
-- 优化语音识别批处理、下载、大小检查和结果模板字段复用。
+- 修复 AstrBot v4.24.2 agent 阶段可能继续读取旧 `.amr Record` 并报 `not a valid file` 的问题。
+- 识别成功或未听清注入时，同步清理 `message`、`message_chain`、`raw_message` 等常见消息链入口。
+- 兼容 OneBot dict 形态的语音段读取，降低不同适配器消息结构差异带来的识别失败风险。
+- 继承 2.0.1 的代码与工作流程优化。
 - 为未来 Web UI 预留可读、可写、可校验的配置接口。
 - `fuck-u-code` 分数由 GitHub Actions bot 自动分析和更新 SVG。
 - 保持 LivingMemory 两阶段注入语义，情绪判断结果不污染长期记忆文本。

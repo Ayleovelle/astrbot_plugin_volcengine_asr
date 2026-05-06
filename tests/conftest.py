@@ -32,6 +32,16 @@ class _Plain:
         self.text = text
 
 
+class _Record:
+    type = "record"
+
+    def __init__(self, file=None, url=None, path=None, data=None):
+        self.file = file
+        self.url = url
+        self.path = path
+        self.data = data
+
+
 class _Timeout:
     def __init__(self, *args, **kwargs):
         pass
@@ -48,6 +58,7 @@ api.logger = _Logger()
 
 message_components = types.ModuleType("astrbot.api.message_components")
 message_components.Plain = _Plain
+message_components.Record = _Record
 
 event = types.ModuleType("astrbot.api.event")
 event.AstrMessageEvent = object

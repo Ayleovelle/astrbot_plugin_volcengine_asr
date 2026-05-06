@@ -256,8 +256,13 @@ def _config_int(config: AstrBotConfig, key: str, default: int = 0) -> int:
 
 
 def _is_record_component(component: Any) -> bool:
-    if isinstance(component, Comp.Record):
+    record_cls = getattr(Comp, "Record", None)
+    if record_cls is not None and isinstance(component, record_cls):
         return True
+    if isinstance(component, dict):
+        component_type = component.get("type", "")
+        type_value = getattr(component_type, "value", component_type)
+        return str(type_value).lower() == "record"
     component_type = getattr(component, "type", "")
     type_value = getattr(component_type, "value", component_type)
     return str(type_value).lower() == "record"
@@ -265,12 +270,32 @@ def _is_record_component(component: Any) -> bool:
 
 def _extract_record_sources(record: Any) -> list[str]:
     sources: list[str] = []
-    for attr in ("file", "url", "path"):
-        value = getattr(record, attr, None)
+
+    def append_source(value: Any) -> None:
         if value:
             source = str(value).strip()
             if source and source not in sources:
                 sources.append(source)
+
+    if isinstance(record, dict):
+        for attr in ("url", "path", "file"):
+            append_source(record.get(attr))
+        data = record.get("data")
+        if isinstance(data, dict):
+            for attr in ("url", "path", "file"):
+                append_source(data.get(attr))
+        return sources
+
+    for attr in ("url", "path", "file"):
+        append_source(getattr(record, attr, None))
+
+    data = getattr(record, "data", None)
+    if isinstance(data, dict):
+        for attr in ("url", "path", "file"):
+            append_source(data.get(attr))
+    elif data is not None:
+        for attr in ("url", "path", "file"):
+            append_source(getattr(data, attr, None))
     return sources
 
 
@@ -347,6 +372,62 @@ def _replace_first_text(text: str, old: str, new: str) -> tuple[str, bool]:
     if not old or old not in text:
         return text, False
     return text.replace(old, new, 1), True
+
+
+def _plain_message_chain(text: str) -> list[Any]:
+    return [Comp.Plain(text)]
+
+
+def _iter_message_chains(event: AstrMessageEvent) -> list[Any]:
+    chains: list[Any] = []
+    seen: set[int] = set()
+
+    def append_chain(chain: Any) -> None:
+        if isinstance(chain, list) and id(chain) not in seen:
+            seen.add(id(chain))
+            chains.append(chain)
+        elif isinstance(chain, dict):
+            for key in ("message", "message_chain", "raw_message"):
+                append_chain(chain.get(key))
+
+    message_obj = getattr(event, "message_obj", None)
+    if message_obj is not None:
+        append_chain(getattr(message_obj, "message", None))
+        append_chain(getattr(message_obj, "message_chain", None))
+        append_chain(getattr(message_obj, "raw_message", None))
+
+    append_chain(getattr(event, "message", None))
+    append_chain(getattr(event, "message_chain", None))
+    append_chain(getattr(event, "raw_message", None))
+
+    get_messages = getattr(event, "get_messages", None)
+    if callable(get_messages):
+        try:
+            append_chain(get_messages())
+        except Exception as exc:
+            logger.warning(f"读取事件消息链失败，已跳过该来源：{exc}")
+
+    return chains
+
+
+def _replace_event_message_with_plain_text(event: AstrMessageEvent, text: str) -> None:
+    chain = _plain_message_chain(text)
+    event.message_str = text
+
+    for attr in ("message", "message_chain"):
+        if hasattr(event, attr):
+            setattr(event, attr, chain.copy())
+    if hasattr(event, "raw_message"):
+        setattr(event, "raw_message", text)
+
+    message_obj = getattr(event, "message_obj", None)
+    if message_obj is not None:
+        setattr(message_obj, "message_str", text)
+        setattr(message_obj, "message", chain.copy())
+        if hasattr(message_obj, "message_chain"):
+            setattr(message_obj, "message_chain", chain.copy())
+        if hasattr(message_obj, "raw_message"):
+            setattr(message_obj, "raw_message", text)
 
 
 def _set_event_extras(event: AstrMessageEvent, extras: dict[str, Any]) -> None:
@@ -1058,6 +1139,7 @@ class VolcengineAsrPlugin(Star):
         llm_text = llm_text.strip()
         if not memory_text or not llm_text:
             return
+        _replace_event_message_with_plain_text(event, memory_text)
 
         prompt = getattr(req, "prompt", "")
         if not isinstance(prompt, str):
@@ -1097,9 +1179,14 @@ class VolcengineAsrPlugin(Star):
 
     @staticmethod
     def _find_records(event: AstrMessageEvent) -> list[Any]:
-        message_obj = getattr(event, "message_obj", None)
-        chain = getattr(message_obj, "message", []) or []
-        return [component for component in chain if _is_record_component(component)]
+        records: list[Any] = []
+        seen: set[int] = set()
+        for chain in _iter_message_chains(event):
+            for component in chain:
+                if _is_record_component(component) and id(component) not in seen:
+                    seen.add(id(component))
+                    records.append(component)
+        return records
 
     @staticmethod
     def _is_self_message(event: AstrMessageEvent) -> bool:
@@ -1437,12 +1524,7 @@ class VolcengineAsrPlugin(Star):
         raw_text: str,
         unclear: bool = False,
     ) -> None:
-        event.message_str = memory_text
-        message_obj = getattr(event, "message_obj", None)
-        if message_obj is not None:
-            setattr(message_obj, "message_str", memory_text)
-            setattr(message_obj, "message", [Comp.Plain(memory_text)])
-
+        _replace_event_message_with_plain_text(event, memory_text)
         _set_event_extras(
             event,
             {

@@ -1,5 +1,16 @@
 # 更新说明
 
+## v2.0.2 - 修复语音 Record 残留
+
+### 主要变更
+
+- 修复 AstrBot v4.24.2 agent 阶段可能继续读取旧 `.amr` 语音段并报 `not a valid file: xxx.amr` 的问题。
+- 识别成功或未听清注入时，插件会把 `event.message`、`event.message_chain`、`event.raw_message`、`message_obj.message`、`message_obj.message_chain`、`message_obj.raw_message` 等常见入口同步替换为纯 `Plain` 文本。
+- LLM 请求阶段增加二次消息链净化，确保 LivingMemory 和主 LLM 链路继续使用干净转写文本。
+- `_find_records()` 兼容 `message`、`message_chain`、`raw_message` 与 OneBot dict 形态，降低不同适配器消息结构差异带来的识别失败风险。
+- `_extract_record_sources()` 支持对象属性、dict 顶层字段和 `data.file` / `data.url` / `data.path` 嵌套字段。
+- 增加回归测试，覆盖语音段兼容查找、OneBot dict 来源解析，以及注入后原始 `Record` 不再残留。
+
 ## v2.0.1 - 代码与工作流程优化
 
 ### 主要变更
