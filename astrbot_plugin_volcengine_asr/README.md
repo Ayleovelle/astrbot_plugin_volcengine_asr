@@ -639,58 +639,44 @@ self.emotion_weighting_policy
 
 设一次语音输入事件为：
 
-$$
-E = (A, T, \mathrm{Ctx}, M)
-$$
+<p align="center"><img src="https://latex.codecogs.com/svg.image?%5Cdisplaystyle%20E%20%3D%20(A%2C%20T%2C%20%5Cmathrm%7BCtx%7D%2C%20M)" alt="E = (A, T, \mathrm{Ctx}, M)" /></p>
 
-其中 $A$ 是原始音频，$T$ 是 ASR 转写文本，$\mathrm{Ctx}$ 是可用上下文，$M$ 是 AstrBot 内部消息对象和缓存。普通 ASR 插件通常只实现：
+其中 `A` 是原始音频，`T` 是 ASR 转写文本，`Ctx` 是可用上下文，`M` 是 AstrBot 内部消息对象和缓存。普通 ASR 插件通常只实现：
 
-$$
-f_{\mathrm{asr}}(A) \rightarrow T
-$$
+<p align="center"><img src="https://latex.codecogs.com/svg.image?%5Cdisplaystyle%20f_%7B%5Cmathrm%7Basr%7D%7D(A)%20%5Crightarrow%20T" alt="f_{\mathrm{asr}}(A) \rightarrow T" /></p>
 
 但语音对话中还存在一个隐变量：
 
-$$
-Z = \mathrm{Emotion}(T, \mathrm{Ctx})
-$$
+<p align="center"><img src="https://latex.codecogs.com/svg.image?%5Cdisplaystyle%20Z%20%3D%20%5Cmathrm%7BEmotion%7D(T%2C%20%5Cmathrm%7BCtx%7D)" alt="Z = \mathrm{Emotion}(T, \mathrm{Ctx})" /></p>
 
-$Z$ 不应被视为事实，只能被视为对用户会话状态的弱推断。如果直接把 $Z$ 写入消息链，系统会产生两个风险：
+`Z` 不应被视为事实，只能被视为对用户会话状态的弱推断。如果直接把 `Z` 写入消息链，系统会产生两个风险：
 
 1. 记忆污染：长期记忆可能记录“用户很焦虑”这种模型推断，而不是用户实际说过的话。
 2. 行为过拟合：主 LLM 可能过度安抚、过度道歉或偏离用户明确请求。
 
 因此插件需要一个受约束的辅助变量：
 
-$$
-A_{\mathrm{w}} = (Z, w)
-$$
+<p align="center"><img src="https://latex.codecogs.com/svg.image?%5Cdisplaystyle%20A_%7B%5Cmathrm%7Bw%7D%7D%20%3D%20(Z%2C%20w)" alt="A_{\mathrm{w}} = (Z, w)" /></p>
 
-其中 $w$ 表示情绪判断对主 LLM 语气的最大参考权重。
+其中 `w` 表示情绪判断对主 LLM 语气的最大参考权重。
 
 ### 为什么使用情绪分布而不是单标签
 
 单标签情绪判断可以写作：
 
-$$
-z = \mathrm{arg\,max}_{i} p_i
-$$
+<p align="center"><img src="https://latex.codecogs.com/svg.image?%5Cdisplaystyle%20z%20%3D%20%5Cmathrm%7Barg%5C%2Cmax%7D_%7Bi%7D%20p_i" alt="z = \mathrm{arg\,max}_{i} p_i" /></p>
 
-但语音短句经常具有多义性。比如“没事”可能是轻松、疲惫、委屈，也可能是话题结束。只保留 $\mathrm{arg\,max}$ 会抹掉不确定性。保留分布 $\mathbf{p}$ 可以进一步计算熵：
+但语音短句经常具有多义性。比如“没事”可能是轻松、疲惫、委屈，也可能是话题结束。只保留 `arg max` 会抹掉不确定性。保留分布向量 `p` 可以进一步计算熵：
 
-$$
-H(\mathbf{p}) = -\sum_i p_i \ln p_i
-$$
+<p align="center"><img src="https://latex.codecogs.com/svg.image?%5Cdisplaystyle%20H(%5Cmathbf%7Bp%7D)%20%3D%20-%5Csum_i%20p_i%20%5Cln%20p_i" alt="H(\mathbf{p}) = -\sum_i p_i \ln p_i" /></p>
 
-熵越高，说明模型越不确定；熵越低，说明判断越集中。把熵转为确定性 $C_{\mathrm{e}}$，可以避免“模型嘴上很自信，但分布很分散”的结果过度影响主 LLM。
+熵越高，说明模型越不确定；熵越低，说明判断越集中。把熵转为确定性 `C_e`，可以避免“模型嘴上很自信，但分布很分散”的结果过度影响主 LLM。
 
 ### 为什么文本长度要进入公式
 
-ASR 文本长度 $N$ 是一个粗糙但有效的证据规模指标。短文本并不必然不可靠，但短文本更容易缺失语义、语气和指代对象。因此公式使用：
+ASR 文本长度 `N` 是一个粗糙但有效的证据规模指标。短文本并不必然不可靠，但短文本更容易缺失语义、语气和指代对象。因此公式使用：
 
-$$
-L = \min\left(1, \frac{\ln(1+N)}{\ln 81}\right)
-$$
+<p align="center"><img src="https://latex.codecogs.com/svg.image?%5Cdisplaystyle%20L%20%3D%20%5Cmin%5Cleft(1%2C%20%5Cfrac%7B%5Cln(1%2BN)%7D%7B%5Cln%2081%7D%5Cright)" alt="L = \min\left(1, \frac{\ln(1+N)}{\ln 81}\right)" /></p>
 
 对数增长可以避免长文本无限增加权重。选择 80 字左右作为接近饱和的经验尺度，是为了适配聊天语音的常见长度：它通常比一句短命令长，但远小于正式段落。
 
@@ -698,19 +684,15 @@ $$
 
 上下文能帮助理解用户语气，但它也可能引入错误迁移。例如用户上一轮很生气，不代表这一轮仍然生气。语音转写文本是当前输入的直接证据，所以插件使用：
 
-$$
-S = L \cdot \left(0.7S_{\mathrm{v}} + 0.3S_{\mathrm{c}}\right)
-$$
+<p align="center"><img src="https://latex.codecogs.com/svg.image?%5Cdisplaystyle%20S%20%3D%20L%20%5Ccdot%20%5Cleft(0.7S_%7B%5Cmathrm%7Bv%7D%7D%20%2B%200.3S_%7B%5Cmathrm%7Bc%7D%7D%5Cright)" alt="S = L \cdot \left(0.7S_{\mathrm{v}} + 0.3S_{\mathrm{c}}\right)" /></p>
 
-这里 $S_{\mathrm{v}}$ 是当前语音文本证据，$S_{\mathrm{c}}$ 是上下文证据。上下文可以修正判断，但不应主导判断。
+这里 `S_v` 是当前语音文本证据，`S_c` 是上下文证据。上下文可以修正判断，但不应主导判断。
 
 ### 为什么短文本要封顶
 
-当 $N < 12$ 时，最终权重被限制：
+当 `N < 12` 时，最终权重被限制：
 
-$$
-w \le 0.25
-$$
+<p align="center"><img src="https://latex.codecogs.com/svg.image?%5Cdisplaystyle%20w%20%5Cle%200.25" alt="w \le 0.25" /></p>
 
 这是为了处理“嗯”“算了”“随便”“好吧”这类短语音。它们在真实聊天里很重要，但也极易被误判。封顶不是说短句不表达情绪，而是说模型在短句上不应拥有太大的行为影响力。
 
@@ -718,17 +700,13 @@ $$
 
 本插件不做心理诊断。它没有声学情绪识别模型，没有临床量表，没有用户长期状态建模。它只根据 ASR 文本和少量上下文生成会话语气参考。更形式化地说，插件不声明：
 
-$$
-\mathrm{UserState} = Z
-$$
+<p align="center"><img src="https://latex.codecogs.com/svg.image?%5Cdisplaystyle%20%5Cmathrm%7BUserState%7D%20%3D%20Z" alt="\mathrm{UserState} = Z" /></p>
 
 它只声明：
 
-$$
-\mathrm{Response} = \mathrm{LLM}(T, \mathrm{Ctx}, A_{\mathrm{w}})
-$$
+<p align="center"><img src="https://latex.codecogs.com/svg.image?%5Cdisplaystyle%20%5Cmathrm%7BResponse%7D%20%3D%20%5Cmathrm%7BLLM%7D(T%2C%20%5Cmathrm%7BCtx%7D%2C%20A_%7B%5Cmathrm%7Bw%7D%7D)" alt="\mathrm{Response} = \mathrm{LLM}(T, \mathrm{Ctx}, A_{\mathrm{w}})" /></p>
 
-其中 $A_{\mathrm{w}}$ 是弱辅助变量。主 LLM 必须优先服从用户明确请求和系统规则。
+其中 `A_w` 是弱辅助变量。主 LLM 必须优先服从用户明确请求和系统规则。
 
 ### 失效条件
 
