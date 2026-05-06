@@ -254,13 +254,13 @@ def test_extract_record_sources_supports_object_dict_and_nested_data():
     }
 
     assert _extract_record_sources(record) == [
-        "https://example.com/voice.amr",
         "voice.amr",
+        "https://example.com/voice.amr",
     ]
     assert _extract_record_sources(nested_object) == ["/tmp/voice.silk", "nested.amr"]
     assert _extract_record_sources(nested_dict) == [
-        "https://example.com/nested.amr",
         "fallback.amr",
+        "https://example.com/nested.amr",
     ]
 
 

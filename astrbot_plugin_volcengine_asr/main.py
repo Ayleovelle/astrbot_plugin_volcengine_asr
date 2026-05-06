@@ -9,7 +9,7 @@ import platform
 import subprocess
 import sys
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
@@ -100,6 +100,7 @@ ASR_EXTRA_UNCLEAR = "volcengine_asr_unclear"
 ASR_EXTRA_EMOTION_RESULT = "volcengine_asr_emotion_result"
 ASR_EXTRA_EMOTION_APPLIED = "volcengine_asr_emotion_applied"
 ASR_EXTRA_EMOTION_INTERNAL_CALL = "volcengine_asr_emotion_internal_call"
+ASR_EXTRA_DIAGNOSTICS = "volcengine_asr_diagnostics"
 WEBUI_CONFIG_SCHEMA_PATH = Path(__file__).resolve().with_name("_conf_schema.json")
 WEBUI_CONFIG_KEYS = (
     "api_key",
@@ -231,6 +232,69 @@ class RecognitionBatch:
     results: list[AsrResult]
     errors: list[str]
     unclear_count: int = 0
+    diagnostics: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class VoiceInput:
+    index: int
+    record: Any
+    sources: list[str]
+
+    def to_diagnostic(self) -> dict[str, Any]:
+        return {
+            "index": self.index,
+            "sources": self.sources,
+        }
+
+
+@dataclass(slots=True)
+class AudioPayloadResult:
+    payload: dict[str, str]
+    source: str
+    source_type: str
+    input_suffix: str = ""
+    detected_suffix: str = ""
+    input_bytes: int | None = None
+    output_format: str = ""
+    output_bytes: int | None = None
+    transcoded: bool = False
+
+    def to_diagnostic(self) -> dict[str, Any]:
+        return {
+            "source": self.source,
+            "source_type": self.source_type,
+            "input_suffix": self.input_suffix,
+            "detected_suffix": self.detected_suffix,
+            "input_bytes": self.input_bytes,
+            "output_format": self.output_format,
+            "output_bytes": self.output_bytes,
+            "transcoded": self.transcoded,
+            "submit_mode": "url" if "url" in self.payload else "base64",
+        }
+
+
+@dataclass(slots=True)
+class VoiceInjectionPlan:
+    memory_text: str
+    llm_text: str
+    raw_text: str
+    unclear: bool = False
+    diagnostics: list[dict[str, Any]] = field(default_factory=list)
+
+    def apply_to_event(self, event: AstrMessageEvent) -> None:
+        _replace_event_message_with_plain_text(event, self.memory_text)
+        _sanitize_event_cached_content(event, self.memory_text)
+        extras = {
+            ASR_EXTRA_TEXT: self.raw_text or self.memory_text,
+            ASR_EXTRA_MEMORY_TEXT: self.memory_text,
+            ASR_EXTRA_LLM_TEXT: self.llm_text,
+            ASR_EXTRA_INJECTED: True,
+            ASR_EXTRA_UNCLEAR: self.unclear,
+        }
+        if self.diagnostics:
+            extras[ASR_EXTRA_DIAGNOSTICS] = self.diagnostics
+        _set_event_extras(event, extras)
 
 
 def _config_str(config: AstrBotConfig, key: str, default: str = "") -> str:
@@ -279,25 +343,35 @@ def _extract_record_sources(record: Any) -> list[str]:
             if source and source not in sources:
                 sources.append(source)
 
+    def append_from_mapping(data: dict[str, Any]) -> None:
+        for attr in ("base64", "path", "file", "url"):
+            value = data.get(attr)
+            if attr == "base64" and value and not str(value).startswith("base64://"):
+                value = f"base64://{value}"
+            append_source(value)
+
     if isinstance(record, dict):
-        for attr in ("url", "path", "file"):
-            append_source(record.get(attr))
+        append_from_mapping(record)
         data = record.get("data")
         if isinstance(data, dict):
-            for attr in ("url", "path", "file"):
-                append_source(data.get(attr))
+            append_from_mapping(data)
         return sources
 
-    for attr in ("url", "path", "file"):
-        append_source(getattr(record, attr, None))
+    for attr in ("base64", "path", "file", "url"):
+        value = getattr(record, attr, None)
+        if attr == "base64" and value and not str(value).startswith("base64://"):
+            value = f"base64://{value}"
+        append_source(value)
 
     data = getattr(record, "data", None)
     if isinstance(data, dict):
-        for attr in ("url", "path", "file"):
-            append_source(data.get(attr))
+        append_from_mapping(data)
     elif data is not None:
-        for attr in ("url", "path", "file"):
-            append_source(getattr(data, attr, None))
+        for attr in ("base64", "path", "file", "url"):
+            value = getattr(data, attr, None)
+            if attr == "base64" and value and not str(value).startswith("base64://"):
+                value = f"base64://{value}"
+            append_source(value)
     return sources
 
 
@@ -570,6 +644,7 @@ def _sanitize_provider_request(req: ProviderRequest, memory_text: str, llm_text:
         req.audio_urls = []
 
     for attr in (
+        "attachments",
         "audios",
         "content",
         "contexts",
@@ -577,8 +652,12 @@ def _sanitize_provider_request(req: ProviderRequest, memory_text: str, llm_text:
         "files",
         "file_urls",
         "input",
+        "media",
+        "metadata",
         "message",
         "messages",
+        "raw_content",
+        "tools",
     ):
         value = getattr(req, attr, None)
         if isinstance(value, list):
@@ -1317,8 +1396,8 @@ class VolcengineAsrPlugin(Star):
         if not self.auto_recognize or not self._allow_event(event):
             return
 
-        records = self._find_records(event)
-        if not records:
+        voice_inputs = self._collect_voice_inputs(event)
+        if not voice_inputs:
             return
 
         config_error = self.client.validate()
@@ -1330,7 +1409,7 @@ class VolcengineAsrPlugin(Star):
                 event.stop_event()
             return
 
-        batch = await self._recognize_records(records)
+        batch = await self._recognize_voice_inputs(voice_inputs)
         results = batch.results
         errors = batch.errors
         unclear_count = batch.unclear_count
@@ -1344,11 +1423,14 @@ class VolcengineAsrPlugin(Star):
             if emotion_judgement is not None:
                 event.set_extra(ASR_EXTRA_EMOTION_RESULT, emotion_judgement.to_dict())
                 llm_text = _append_emotion_guidance(llm_text, emotion_judgement)
-            self._inject_user_text(
+            self._apply_voice_injection_plan(
                 event,
-                memory_text=transcription_text,
-                llm_text=llm_text,
-                raw_text=transcription_text,
+                VoiceInjectionPlan(
+                    memory_text=transcription_text,
+                    llm_text=llm_text,
+                    raw_text=transcription_text,
+                    diagnostics=batch.diagnostics,
+                ),
             )
             logger.info(
                 "已将语音识别结果注入为干净用户输入，"
@@ -1362,12 +1444,15 @@ class VolcengineAsrPlugin(Star):
             and unclear_count > 0
             and self.inject_on_unclear_voice
         ):
-            self._inject_user_text(
+            self._apply_voice_injection_plan(
                 event,
-                memory_text=DEFAULT_UNCLEAR_MEMORY_TEXT,
-                llm_text=self.unclear_voice_prompt,
-                raw_text="",
-                unclear=True,
+                VoiceInjectionPlan(
+                    memory_text=DEFAULT_UNCLEAR_MEMORY_TEXT,
+                    llm_text=self.unclear_voice_prompt,
+                    raw_text="",
+                    unclear=True,
+                    diagnostics=batch.diagnostics,
+                ),
             )
             logger.info(
                 "语音未识别到内容，已注入干净未听清事件文本，"
@@ -1413,26 +1498,19 @@ class VolcengineAsrPlugin(Star):
 
         prompt = getattr(req, "prompt", "")
         if not isinstance(prompt, str):
-            return
+            prompt = ""
 
         new_prompt, replaced = _replace_first_text(prompt, memory_text, llm_text)
         if not replaced:
-            if not prompt.strip():
-                new_prompt = llm_text
-                replaced = True
-            elif prompt.strip() == memory_text:
-                new_prompt = llm_text
-                replaced = True
-
-        if replaced:
-            req.prompt = new_prompt
-            event.set_extra("volcengine_asr_llm_prompt_applied", True)
-            logger.info("已在 LLM 请求阶段应用语音提示词模板，长期记忆仍保留干净转写文本。")
-        else:
+            new_prompt = f"{llm_text}\n\n{prompt.strip()}" if prompt.strip() else llm_text
             logger.warning(
-                "未能在 LLM prompt 中定位语音转写文本，跳过模板替换，"
+                "未能在 LLM prompt 中定位语音转写文本，已将语音提示词前置并保留原 prompt，"
                 f"memory_text={memory_text}, prompt={prompt[:120]}"
             )
+
+        req.prompt = new_prompt
+        event.set_extra("volcengine_asr_llm_prompt_applied", True)
+        logger.info("已在 LLM 请求阶段应用语音提示词模板，长期记忆仍保留干净转写文本。")
 
     def _allow_event(self, event: AstrMessageEvent) -> bool:
         message_obj = getattr(event, "message_obj", None)
@@ -1459,6 +1537,13 @@ class VolcengineAsrPlugin(Star):
         return records
 
     @staticmethod
+    def _collect_voice_inputs(event: AstrMessageEvent) -> list[VoiceInput]:
+        return [
+            VoiceInput(index=index, record=record, sources=_extract_record_sources(record))
+            for index, record in enumerate(VolcengineAsrPlugin._find_records(event), start=1)
+        ]
+
+    @staticmethod
     def _is_self_message(event: AstrMessageEvent) -> bool:
         message_obj = getattr(event, "message_obj", None)
         sender = getattr(message_obj, "sender", None)
@@ -1471,24 +1556,47 @@ class VolcengineAsrPlugin(Star):
         return bool(sender_id and self_id and str(sender_id) == str(self_id))
 
     async def _recognize_records(self, records: list[Any]) -> RecognitionBatch:
+        return await self._recognize_voice_inputs(
+            [
+                VoiceInput(index=index, record=record, sources=_extract_record_sources(record))
+                for index, record in enumerate(records, start=1)
+            ]
+        )
+
+    async def _recognize_voice_inputs(self, voice_inputs: list[VoiceInput]) -> RecognitionBatch:
         batch = RecognitionBatch(results=[], errors=[])
-        for index, record in enumerate(records, start=1):
+        for voice_input in voice_inputs:
+            diagnostic = voice_input.to_diagnostic()
             try:
-                result = await self.client.recognize(await self._build_audio_payload(record))
+                audio_payload = await self._build_audio_payload_result(voice_input)
+                diagnostic.update(audio_payload.to_diagnostic())
+                result = await self.client.recognize(audio_payload.payload)
                 if result.text:
                     batch.results.append(result)
                 else:
-                    self._add_unclear_error(batch, index, "未识别到有效内容")
+                    self._add_unclear_error(batch, voice_input.index, "未识别到有效内容")
             except UserVisibleError as exc:
                 logger.warning(f"语音识别准备失败：{exc}")
+                diagnostic.update({"error_code": "audio_prepare_failed", "error_message": str(exc)})
                 if self.notify_asr_error:
-                    batch.errors.append(f"第 {index} 条语音处理失败：{exc}")
+                    batch.errors.append(f"第 {voice_input.index} 条语音处理失败：{exc}")
             except VolcAsrError as exc:
-                self._handle_asr_error(batch, index, exc)
+                diagnostic.update(
+                    {
+                        "error_code": exc.status_code or "asr_failed",
+                        "error_message": str(exc),
+                        "logid": exc.logid,
+                        "request_id": exc.request_id,
+                    }
+                )
+                self._handle_asr_error(batch, voice_input.index, exc)
             except Exception:
                 logger.exception("语音识别出现未预期异常")
+                diagnostic.update({"error_code": "unexpected_error", "error_message": "插件内部异常"})
                 if self.notify_asr_error:
-                    batch.errors.append(f"第 {index} 条语音识别失败：插件内部异常。")
+                    batch.errors.append(f"第 {voice_input.index} 条语音识别失败：插件内部异常。")
+            finally:
+                batch.diagnostics.append(diagnostic)
         return batch
 
     def _add_unclear_error(self, batch: RecognitionBatch, index: int, reason: str) -> None:
@@ -1514,32 +1622,64 @@ class VolcengineAsrPlugin(Star):
             batch.errors.append(f"第 {index} 条语音识别失败：{detail}")
 
     async def _build_audio_payload(self, record: Any) -> dict[str, str]:
-        sources = _extract_record_sources(record)
+        voice_input = VoiceInput(index=1, record=record, sources=_extract_record_sources(record))
+        return (await self._build_audio_payload_result(voice_input)).payload
+
+    async def _build_audio_payload_result(self, voice_input: VoiceInput) -> AudioPayloadResult:
+        sources = voice_input.sources
         if self.submit_mode == "url":
             for source in sources:
                 if source.startswith(("http://", "https://")) and _source_suffix(source) in SUPPORTED_AUDIO_EXTS:
-                    return {"url": source}
+                    suffix = _source_suffix(source)
+                    return AudioPayloadResult(
+                        payload={"url": source},
+                        source=source,
+                        source_type="url",
+                        input_suffix=suffix,
+                        detected_suffix=suffix,
+                        output_format="url",
+                    )
 
-        audio_bytes, source = await self._record_to_audio_bytes(record, sources)
-        audio_bytes = await self._maybe_transcode_audio(audio_bytes, source)
-        if len(audio_bytes) > self.max_audio_bytes:
+        audio_bytes, source, source_type = await self._record_to_audio_bytes(
+            voice_input.record,
+            sources,
+        )
+        input_suffix = _source_suffix(source)
+        detected_suffix = _detect_audio_suffix(audio_bytes, source)
+        input_bytes = len(audio_bytes)
+        normalized_audio, output_format, transcoded = await self._normalize_audio_payload_bytes(
+            audio_bytes,
+            source,
+            detected_suffix,
+        )
+        if len(normalized_audio) > self.max_audio_bytes:
             raise UserVisibleError(f"音频超过配置上限 {_max_mb_text(self.max_audio_bytes)} MB。")
-        base64_audio = base64.b64encode(audio_bytes).decode("ascii")
-        return {"data": base64_audio}
+        base64_audio = base64.b64encode(normalized_audio).decode("ascii")
+        return AudioPayloadResult(
+            payload={"data": base64_audio},
+            source=source,
+            source_type=source_type,
+            input_suffix=input_suffix,
+            detected_suffix=detected_suffix,
+            input_bytes=input_bytes,
+            output_format=output_format,
+            output_bytes=len(normalized_audio),
+            transcoded=transcoded,
+        )
 
-    async def _record_to_audio_bytes(self, record: Any, sources: list[str]) -> tuple[bytes, str]:
+    async def _record_to_audio_bytes(self, record: Any, sources: list[str]) -> tuple[bytes, str, str]:
         last_error: Exception | None = None
         for source in sources:
             try:
                 if source.startswith("base64://"):
-                    return base64.b64decode(source.removeprefix("base64://")), source
+                    return base64.b64decode(source.removeprefix("base64://")), source, "base64"
 
                 local_path = _source_to_local_path(source)
                 if local_path is not None:
-                    return await self._file_to_bytes(local_path), str(local_path)
+                    return await self._file_to_bytes(local_path), str(local_path), "local_path"
 
                 if source.startswith(("http://", "https://")):
-                    return await self._download_bytes(source), source
+                    return await self._download_bytes(source), source, "download"
             except UserVisibleError as exc:
                 last_error = exc
             except Exception as exc:
@@ -1549,7 +1689,7 @@ class VolcengineAsrPlugin(Star):
         if callable(convert_to_base64):
             try:
                 base64_audio = await convert_to_base64()
-                return base64.b64decode(str(base64_audio).removeprefix("base64://")), "base64://record"
+                return base64.b64decode(str(base64_audio).removeprefix("base64://")), "base64://record", "record_converter"
             except Exception as exc:
                 last_error = exc
 
@@ -1585,6 +1725,18 @@ class VolcengineAsrPlugin(Star):
         content_length = _safe_int(response.headers.get("content-length"))
         if content_length is not None and content_length > self.max_audio_bytes:
             raise UserVisibleError(f"音频超过配置上限 {_max_mb_text(self.max_audio_bytes)} MB。")
+
+    async def _normalize_audio_payload_bytes(
+        self,
+        data: bytes,
+        source: str,
+        detected_suffix: str | None = None,
+    ) -> tuple[bytes, str, bool]:
+        suffix = detected_suffix or _detect_audio_suffix(data, source)
+        if suffix in SUPPORTED_AUDIO_EXTS:
+            return data, suffix.lstrip(".") or "raw", False
+        transcoded = await self._maybe_transcode_audio(data, source)
+        return transcoded, self.transcode_output_format, True
 
     async def _maybe_transcode_audio(self, data: bytes, source: str) -> bytes:
         suffix = _detect_audio_suffix(data, source)
@@ -1789,6 +1941,10 @@ class VolcengineAsrPlugin(Star):
         return _render_prompt_template(self.voice_prompt_template, self._build_result_values(results))
 
     @staticmethod
+    def _apply_voice_injection_plan(event: AstrMessageEvent, plan: VoiceInjectionPlan) -> None:
+        plan.apply_to_event(event)
+
+    @staticmethod
     def _inject_user_text(
         event: AstrMessageEvent,
         *,
@@ -1797,15 +1953,12 @@ class VolcengineAsrPlugin(Star):
         raw_text: str,
         unclear: bool = False,
     ) -> None:
-        _replace_event_message_with_plain_text(event, memory_text)
-        _sanitize_event_cached_content(event, memory_text)
-        _set_event_extras(
+        VolcengineAsrPlugin._apply_voice_injection_plan(
             event,
-            {
-                ASR_EXTRA_TEXT: raw_text or memory_text,
-                ASR_EXTRA_MEMORY_TEXT: memory_text,
-                ASR_EXTRA_LLM_TEXT: llm_text,
-                ASR_EXTRA_INJECTED: True,
-                ASR_EXTRA_UNCLEAR: unclear,
-            },
+            VoiceInjectionPlan(
+                memory_text=memory_text,
+                llm_text=llm_text,
+                raw_text=raw_text,
+                unclear=unclear,
+            ),
         )

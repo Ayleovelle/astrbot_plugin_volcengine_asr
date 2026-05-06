@@ -1,5 +1,28 @@
 # 更新说明
 
+## v2.1.0 - 重新构建语音工作流
+
+### 主要变更
+
+- 重新构建 QQ 语音从 AstrBot 事件进入 LLM 的完整工作流，主链路拆为 `VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest`。
+- 进入消息事件时先收集稳定 `VoiceInput` 快照，后续不再依赖可能被 AstrBot、适配器或其它插件缓存改写的原始 `event`。
+- 加强 Record 来源发现，兼容 AstrBot 消息链、`message_obj`、`raw_message`、裸 OneBot `record` dict，以及 NapCat 常见 `file` / `path` / `url` / `base64` 字段。
+- 优化音频读取与提交路径，默认继续推荐 `submit_mode=base64`，先在 AstrBot 侧读取、下载或转码语音，再提交给火山引擎。
+- `submit_mode=url` 只直传明确支持的 `.wav` / `.mp3` / `.ogg` / `.opus` HTTP(S) URL；`.amr` / `.silk` 等 QQ 语音会回落到下载、转码和 Base64 上传。
+- 成功识别或未听清注入时，统一通过 `VoiceInjectionPlan` 将事件消息链改写为干净 `Plain` 文本，并保留结构化语音处理诊断。
+- `on_llm_request` 阶段继续清理 `ProviderRequest.audio_urls`、上下文、临时内容和缓存字段中的音频残留；当找不到原始转写文本时，会前置 `llm_text` 并保留原 prompt，避免丢失 LivingMemory 或 provider 已组装的上下文。
+- 保持 LivingMemory 友好的两阶段语义：消息阶段只写入用户语音的纯转写文本，LLM 请求阶段再应用 `voice_prompt_template` 和可选情绪辅助信息。
+- 增加工作流回归测试，覆盖成功注入、未听清注入、错误阻断、裸 `.amr` 转换失败、URL AMR 不直传和 LLM 请求兜底。
+- README 新增 AstrBot / OneBot v11 / NapCat 兼容依据，补充安装、错包、乱码和 `not a valid file: xxx.amr` 排障说明。
+
+### 安装与升级提醒
+
+- 推荐从 GitHub Releases 下载 `astrbot_plugin_volcengine_asr.zip` 后，在 AstrBot WebUI 插件页上传安装。
+- 不要使用 GitHub 绿色 Code 按钮下载的源码 zip 代替 Release zip。
+- 发布包 zip 根目录应直接包含 `metadata.yaml`、`main.py`、`_conf_schema.json`、`requirements.txt`，不应再套一层同名目录。
+- 只上传 `output/astrbot_plugin_volcengine_asr.zip`；不要上传仓库根目录旧 zip、`_release_body.json` 或 `_release_draft.json`。
+- README、CHANGELOG 和发布说明均按 UTF-8 保存；Windows 终端乱码通常是控制台编码问题，不代表文件损坏。
+
 ## v2.0.4 - 修复 ffmpeg 启动探测与打包校验
 
 ### 主要变更

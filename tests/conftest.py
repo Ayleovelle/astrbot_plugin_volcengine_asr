@@ -12,6 +12,9 @@ class _Logger:
     def error(self, *args, **kwargs):
         pass
 
+    def exception(self, *args, **kwargs):
+        pass
+
 
 class _Filter:
     class EventMessageType:

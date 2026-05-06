@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.0.4-brightgreen.svg" alt="Version 2.0.4">
+  <img src="https://img.shields.io/badge/Version-2.1.0-brightgreen.svg" alt="Version 2.1.0">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License MIT">
@@ -41,7 +41,7 @@
 | 1. [插件定位](#插件定位) | 9. [情绪判断模块](#情绪判断模块) |
 | 2. [适合谁使用](#适合谁使用) | 10. [完整配置说明](#完整配置说明) |
 | 3. [核心特性](#核心特性) | 11. [默认提示词与模板写法](#默认提示词与模板写法) |
-| 4. [运行流程](#运行流程) | 12. [LivingMemory 兼容机制](#livingmemory-兼容机制) |
+| 4. [重建后的语音工作流](#重建后的语音工作流) | 12. [LivingMemory 兼容机制](#livingmemory-兼容机制) |
 | 5. [安装方式](#安装方式) | 13. [命令与状态检查](#命令与状态检查) |
 | 6. [火山引擎准备](#火山引擎准备) | 14. [常见问题与排障](#常见问题与排障) |
 | 7. [推荐配置](#推荐配置) | 15. [目录结构与发布包说明](#目录结构与发布包说明) |
@@ -93,22 +93,49 @@
 | 友好降级 | 静音、杂音、空结果时可让 LLM 自然地请用户重说。 |
 | 可排障 | 支持显示火山接口 `logid`，便于向火山引擎或运维侧排查问题。 |
 
-## 运行流程
+## 2.1.0 语音工作流重建说明
+
+`2.1.0` 不是继续在旧链路上补字段，而是把语音处理拆成五段明确边界：
+
+```text
+VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest
+```
+
+这样做的原因很直接：AstrBot 默认 agent 会在构造 LLM 请求时遍历 `event.message_obj.message`，如果里面还残留 `Record(file="xxx.amr")` 这种裸文件名，就可能触发 `Record.convert_to_file_path()` 并报 `not a valid file: xxx.amr`。所以新工作流先把原始语音输入收集成稳定快照，后续不再依赖会被其它插件或框架缓存改写的 `event` 原始结构。
+
+| 阶段 | 新职责 |
+| :--- | :--- |
+| `VoiceInput` | 只在消息事件开始时收集一次语音段，兼容 AstrBot 消息链、`message_obj`、`raw_message`、裸 OneBot `record` dict，以及 NapCat 常见 `file` / `path` / `url` / `base64` 字段。 |
+| `AudioPayloadResult` | 把一条语音变成火山 ASR 可消费的 `url` 或 `data`，同时记录来源、真实格式、输入大小、是否转码、输出格式和输出大小。 |
+| `ASR` | 只负责调用火山引擎并返回 `AsrResult`，空文本、静音、下载失败、转码失败都会写入结构化诊断。 |
+| `VoiceInjectionPlan` | 明确区分 `memory_text`、`llm_text`、`raw_text` 和 `unclear`，成功或未听清时统一把事件消息链改成纯 `Plain` 文本。 |
+| `ProviderRequest` | 在 `on_llm_request` 阶段清理本轮请求里的音频残留，并强制让主 LLM 收到 `llm_text`。即使 `req.prompt` 被 AstrBot 或其它插件包装到找不到纯转写文本，也不再静默跳过。 |
+
+这版的核心策略是：
+
+- 成功注入路径不调用 `event.stop_event()`，因为 `stop_event()` 会阻止后续默认 LLM / agent 流程。
+- 识别失败、直接回复转写、配置错误这类不需要默认 LLM 继续处理原语音的路径，仍按配置或错误状态阻断事件，避免旧 `Record` 继续流转。
+- 默认继续推荐 `submit_mode=base64`：先由 AstrBot 所在机器读取、下载或转码，再提交给火山引擎，避免临时 URL、内网 URL、NapCat raw silk URL 被火山侧直接访问失败。
+- `submit_mode=url` 只会直传明确属于 `.wav` / `.mp3` / `.ogg` / `.opus` 的 HTTP(S) URL；`.amr` / `.silk` 这类 QQ 语音会回落到下载、转码和 Base64 上传。
+
+## 重建后的语音工作流
 
 默认推荐流程如下：
 
 ```text
 QQ 语音 Record
-  -> 读取 file / url / path
+  -> 收集 VoiceInput 快照
+  -> 读取 base64 / path / file / url
   -> 下载或读取音频
   -> 检测格式与大小
   -> 必要时调用 ffmpeg 转码
   -> Base64 提交到火山引擎 ASR
   -> 得到纯转写文本
   -> 可选：情绪判断 LLM 分析转写文本和上下文
-  -> 消息事件阶段只注入 Plain 纯文本
+  -> 生成 VoiceInjectionPlan
+  -> 消息事件阶段只注入 Plain 纯文本 memory_text
   -> LivingMemory 读取和存储干净文本
-  -> LLM 请求阶段套 voice_prompt_template 和情绪辅助信息
+  -> LLM 请求阶段清理音频残留并写入 llm_text
   -> 主 LLM 按参考权重调整语气并生成回复
 ```
 
@@ -116,27 +143,33 @@ QQ 语音 Record
 
 ```mermaid
 flowchart LR
-    A[QQ 语音 Record] --> B[读取 file / url / path]
-    B --> C[下载或读取音频]
-    C --> D{格式是否支持}
-    D -->|WAV / MP3 / OGG / OPUS| E[Base64 上传]
-    D -->|AMR / SILK / M4A 等| F[ffmpeg 转码]
-    F --> E
-    E --> G[火山引擎 ASR]
-    G --> H[得到纯转写文本]
-    H --> I{启用情绪判断?}
-    I -->|是| J[情绪判断 LLM 输出 JSON]
-    J --> K[插件公式计算参考权重]
-    I -->|否| L[跳过情绪增强]
-    K --> M[构造主 LLM 情绪辅助块]
-    L --> N[改写事件为 Plain 文本]
-    M --> N
-    N --> O[LivingMemory 检索和存储纯文本]
-    O --> P[LLM 请求阶段套语音提示词]
-    P --> Q[主 LLM 生成回复]
+    A[QQ 语音 Record] --> B[VoiceInput 快照]
+    B --> C[读取 base64 / path / file / url]
+    C --> D[下载或读取音频]
+    D --> E{格式是否支持}
+    E -->|WAV / MP3 / OGG / OPUS| F[Base64 上传]
+    E -->|AMR / SILK / M4A 等| G[ffmpeg 转码]
+    G --> F
+    F --> H[火山引擎 ASR]
+    H --> I[VoiceInjectionPlan]
+    I --> J[事件消息链改写为 Plain memory_text]
+    J --> K[LivingMemory 检索和存储纯文本]
+    K --> L[on_llm_request 清理音频残留]
+    L --> M[主 LLM 收到 llm_text]
+    M --> N[生成回复]
 ```
 
 这个顺序很重要：记忆插件读到的是用户实际说的话，而不是“请尽量使用语音回复”这类提示词包装。
+
+## AstrBot / OneBot / NapCat 兼容依据
+
+本次重建工作流同时参考了 AstrBot、OneBot v11 和 NapCat 的实际语义：
+
+- AstrBot 的消息事件文档说明，`event.stop_event()` 会停止事件传播，后续步骤不会继续执行；所以本插件在“识别成功并希望默认 LLM 继续回复”的路径上不能使用它。详见 [AstrBot 处理消息事件文档](https://docs.astrbot.app/dev/star/guides/listen-message-event.html)。
+- AstrBot v4.24.2 默认 agent 构造 `ProviderRequest` 时会读取 `event.message_str`，并遍历 `event.message_obj.message` 里的媒体段。若仍有 `Record(file="xxx.amr")` 裸文件名，就可能在 `Record.convert_to_file_path()` 阶段失败。因此插件必须在事件阶段把消息链改写成 `Plain(memory_text)`，并在 LLM 请求阶段兜底清理 `ProviderRequest.audio_urls`。
+- OneBot v11 的语音消息段类型是 `record`，标准接收字段以 `data.file` 为核心，接收侧也可能带 `url`。详见 [OneBot v11 消息段类型：语音](https://283375.github.io/onebot_v11_vitepress/message/segment.html)。
+- OneBot v11 的 `get_record` 标准动作以收到的 `file` 为参数，并通过 `out_format` 请求转换格式。详见 [OneBot v11 公开 API：get_record](https://raw.githubusercontent.com/botuniverse/onebot-11/master/api/public.md)。
+- NapCat 的 `record` 消息段会出现 `file`、`path`、`url`、`file_id`、`file_size`、`file_unique` 等实现扩展字段，但 NapCat 文档也提示语音 URL 可能是 raw silk 资源，不能直接当通用音频交给 ASR。详见 [NapCat 消息格式兼容情况](https://www.napcat.wiki/develop/msg) 和 [NapCat 文件处理框架指南](https://napneko.github.io/develop/file)。
 
 ## 安装方式
 
@@ -897,11 +930,11 @@ PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q -p no:cache
 python3 scripts/build_release_zip.py
 ```
 
-发布时只上传 `output/astrbot_plugin_volcengine_asr.zip`。根目录旧 zip、`_release_body.json`、`_release_draft.json` 都不是 2.0.3 的发布依据。
+发布时只上传 `output/astrbot_plugin_volcengine_asr.zip`。根目录旧 zip、`_release_body.json`、`_release_draft.json` 都不是 2.1.0 的发布依据。
 
 ## Web UI 接口预留
 
-2.0.3 先不把完整 Web UI 合进 `main`，但已经为后续独立 Web UI 分支预留稳定后端接口。未来插件配置页、状态页、情绪计算可视化，都应优先调用这些方法，而不是直接读取插件内部属性。
+当前 `main` 仍不把完整 Web UI 合进来，但已经为后续独立 Web UI 分支预留稳定后端接口。未来插件配置页、状态页、情绪计算可视化，都应优先调用这些方法，而不是直接读取插件内部属性。
 
 | 接口 | 用途 |
 | :--- | :--- |
@@ -928,21 +961,16 @@ python3 scripts/build_release_zip.py
 
 ## 版本说明
 
-当前版本：`2.0.4`
+当前版本：`2.1.0`
 
 本版本重点：
 
-- 修复 ffmpeg 找到但无法启动时没有自动降级、错误不清晰的问题。
-- ffmpeg 查找会逐个执行 `ffmpeg -version` 启动探测，内置不可用时自动尝试 `imageio-ffmpeg` 和系统 PATH。
-- 转码启动阶段会把 `PermissionError`、`Exec format error`、`noexec` 等底层 `OSError` 转成用户可读错误。
-- `/volc_asr_status` 增加 `ffmpeg状态`，方便直接判断转码链路是否可用。
-- Release zip 构建脚本强制校验内置 `bin/linux-x86_64/ffmpeg` 存在，并确认 zip 权限位为 `0o100755`。
-- 继承 2.0.1 的代码与工作流程优化。
-- 为未来 Web UI 预留可读、可写、可校验的配置接口。
-- `fuck-u-code` 分数由 GitHub Actions bot 自动分析和更新 SVG。
-- 保持 LivingMemory 两阶段注入语义，情绪判断结果不污染长期记忆文本。
-- 同步包内依赖，让仓库安装模式也能安装 `imageio-ffmpeg` 作为转码兜底。
-- 扩展 helper 测试，覆盖 Web UI 接口、事件注入标记和识别结果模板字段。
+- 重新构建语音工作流：`VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest`。
+- 成功识别后，消息阶段只写入干净 `Plain` 文本，LLM 请求阶段再应用语音提示词和情绪辅助。
+- `ProviderRequest` 阶段继续清理音频残留，并在找不到原始转写文本时前置 `llm_text`、保留原 prompt，避免丢失 LivingMemory 或 provider 上下文。
+- `submit_mode=url` 不再信任 `.amr` / `.silk` 这类 QQ 语音 URL，会回落到下载、转码和 Base64 上传。
+- 保留 2.0.4 的 ffmpeg 启动探测、降级、`/volc_asr_status` 状态显示和 Release zip 权限校验。
+- 增加工作流回归测试，覆盖成功注入、未听清注入、错误阻断、裸 `.amr` 转换失败、URL AMR 不直传和 LLM 请求兜底。
 
 完整更新记录见 [CHANGELOG.md](./CHANGELOG.md)。
 
