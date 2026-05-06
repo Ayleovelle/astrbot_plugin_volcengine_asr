@@ -248,6 +248,7 @@ def test_estimate_base64_size_handles_padding():
 def test_extract_record_sources_supports_object_dict_and_nested_data():
     record = Comp.Record(file="voice.amr", url="https://example.com/voice.amr")
     nested_object = Comp.Record(data={"path": "/tmp/voice.silk", "file": "nested.amr"})
+    file_id_object = Comp.Record(data={"file_id": "napcat-file-id"})
     nested_dict = {
         "type": "record",
         "data": {"url": "https://example.com/nested.amr", "file": "fallback.amr"},
@@ -258,6 +259,7 @@ def test_extract_record_sources_supports_object_dict_and_nested_data():
         "https://example.com/voice.amr",
     ]
     assert _extract_record_sources(nested_object) == ["/tmp/voice.silk", "nested.amr"]
+    assert _extract_record_sources(file_id_object) == ["napcat-file-id"]
     assert _extract_record_sources(nested_dict) == [
         "fallback.amr",
         "https://example.com/nested.amr",
@@ -316,6 +318,58 @@ def test_find_records_supports_core_record_duck_typing():
     event.message_obj.message = [record]
 
     assert VolcengineAsrPlugin._find_records(event) == [record]
+
+
+def test_find_records_reads_iterable_message_chain_object():
+    class MessageChain:
+        def __init__(self, items):
+            self.chain = list(items)
+
+        def __iter__(self):
+            return iter(self.chain)
+
+        def __setitem__(self, key, value):
+            self.chain[key] = value
+
+        def __getitem__(self, key):
+            return self.chain[key]
+
+    event = _FakeEvent()
+    record = Comp.Record(file="chain-object.amr")
+    chain = MessageChain([record])
+    event.message_obj.message = chain
+
+    assert VolcengineAsrPlugin._find_records(event) == [record]
+
+
+def test_find_records_reads_non_iterable_astrbot_message_chain_object():
+    class MessageChain:
+        def __init__(self, items):
+            self.chain = list(items)
+
+    event = _FakeEvent()
+    record = Comp.Record(file="astrbot-chain.amr")
+    event.message_obj.message = MessageChain([record])
+
+    assert VolcengineAsrPlugin._find_records(event) == [record]
+
+
+def test_non_iterable_message_chain_is_mutated_to_plain_text():
+    class MessageChain:
+        def __init__(self, items):
+            self.chain = list(items)
+
+    event = _FakeEvent()
+    chain = MessageChain([Comp.Record(file="astrbot-chain.amr")])
+    event.message_obj.message = chain
+
+    assert VolcengineAsrPlugin._find_records(event)
+
+    plugin_main._replace_event_message_with_plain_text(event, "干净文本")
+
+    assert VolcengineAsrPlugin._find_records(event) == []
+    assert len(chain.chain) == 1
+    assert chain.chain[0].text == "干净文本"
 
 
 def test_find_records_reads_bare_raw_record_dict():

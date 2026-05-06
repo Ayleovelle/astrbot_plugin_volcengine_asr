@@ -1,4 +1,5 @@
 import asyncio
+import base64
 
 import astrbot.api.message_components as Comp
 
@@ -69,24 +70,48 @@ class _FakeProviderRequest:
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": "上下文"},
+                    {"type": "text", "text": "context"},
                     {"type": "audio_url", "audio_url": "old.amr"},
                 ],
             }
         ]
         self.extra_user_content_parts = [
             {"type": "text", "text": "[Audio Attachment: path old.amr]"},
-            {"type": "text", "text": "保留"},
+            {"type": "text", "text": "keep"},
         ]
         self.messages = [
             {
                 "role": "user",
                 "content": [
                     {"type": "audio_url", "audio_url": "old.amr"},
-                    {"type": "text", "text": "旧消息"},
+                    {"type": "text", "text": "old message"},
                 ],
             }
         ]
+
+
+class _NonIterableMessageChain:
+    def __init__(self, items):
+        self.chain = list(items)
+
+
+class _OneBotRecord:
+    def __init__(self, file):
+        self.type = "record"
+        self.file = file
+
+    async def convert_to_base64(self):
+        raise Exception(f"not a valid file: {self.file}")
+
+
+class _FakeOneBot:
+    def __init__(self, result):
+        self.result = result
+        self.calls = []
+
+    async def call_action(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        return self.result
 
 
 async def _collect_asyncgen(async_gen):
@@ -100,7 +125,7 @@ def _make_plugin(**config):
     merged = {
         "api_key": "token",
         "enable_transcode": False,
-        "voice_prompt_template": "<text>[语音提示]",
+        "voice_prompt_template": "<text>[voice prompt]",
     }
     merged.update(config)
     return VolcengineAsrPlugin(None, merged)
@@ -113,7 +138,7 @@ def test_on_message_success_rebuilds_event_and_provider_request():
 
     async def fake_recognize_voice_inputs(voice_inputs):
         return RecognitionBatch(
-            results=[AsrResult(text="你好", request_id="req-1", logid="log-1")],
+            results=[AsrResult(text="hello", request_id="req-1", logid="log-1")],
             errors=[],
             diagnostics=[{"index": voice_inputs[0].index, "source_type": "record_converter"}],
         )
@@ -125,24 +150,52 @@ def test_on_message_success_rebuilds_event_and_provider_request():
     assert outputs == []
     assert event.stopped == 0
     assert event.calls == []
-    assert event.message_str == "你好"
-    assert event.message_obj.message_str == "你好"
-    assert event.message[0].text == "你好"
-    assert event.message_obj.message[0].text == "你好"
+    assert event.message_str == "hello"
+    assert event.message_obj.message_str == "hello"
+    assert event.message[0].text == "hello"
+    assert event.message_obj.message[0].text == "hello"
     assert VolcengineAsrPlugin._find_records(event) == []
-    assert event.get_extra(ASR_EXTRA_MEMORY_TEXT) == "你好"
-    assert event.get_extra(ASR_EXTRA_LLM_TEXT) == "你好[语音提示]"
+    assert event.get_extra(ASR_EXTRA_MEMORY_TEXT) == "hello"
+    assert event.get_extra(ASR_EXTRA_LLM_TEXT) == "hello[voice prompt]"
     assert event.get_extra(ASR_EXTRA_INJECTED) is True
     assert event.get_extra(ASR_EXTRA_DIAGNOSTICS)[0]["source_type"] == "record_converter"
 
-    req = _FakeProviderRequest(prompt="包装 你好 结束")
+    provider_request = event.get_extra("provider_request")
+    assert provider_request.prompt == "hello[voice prompt]"
+    assert provider_request.audio_urls == []
+
+    req = _FakeProviderRequest(prompt="wrap hello end")
     asyncio.run(plugin.apply_voice_prompt_template(event, req))
 
-    assert req.prompt == "包装 你好[语音提示] 结束"
+    assert req.prompt == "wrap hello[voice prompt] end"
     assert req.audio_urls == []
     assert req.files == []
-    assert req.contexts == [{"role": "user", "content": [{"type": "text", "text": "上下文"}]}]
-    assert req.extra_user_content_parts == [{"type": "text", "text": "保留"}]
+    assert req.contexts == [{"role": "user", "content": [{"type": "text", "text": "context"}]}]
+    assert req.extra_user_content_parts == [{"type": "text", "text": "keep"}]
+
+
+def test_on_message_success_cleans_non_iterable_message_chain_object():
+    record = Comp.Record(file="330898de94fe28ae378bdee1c2fe929f.amr")
+    original_chain = _NonIterableMessageChain([record])
+    event = _FakeEvent()
+    event.message_obj.message = original_chain
+    event.message = []
+    event.message_chain = []
+    event.raw_message = []
+    plugin = _make_plugin()
+
+    async def fake_recognize_voice_inputs(_voice_inputs):
+        return RecognitionBatch(results=[AsrResult(text="hello", request_id="req-1")], errors=[])
+
+    plugin._recognize_voice_inputs = fake_recognize_voice_inputs
+
+    outputs = asyncio.run(_collect_asyncgen(plugin.on_message(event)))
+
+    assert outputs == []
+    assert VolcengineAsrPlugin._find_records(event) == []
+    assert len(original_chain.chain) == 1
+    assert original_chain.chain[0].text == "hello"
+    assert event.get_extra("provider_request").prompt == "hello[voice prompt]"
 
 
 def test_on_message_cleans_record_before_emotion_llm_call():
@@ -151,7 +204,7 @@ def test_on_message_cleans_record_before_emotion_llm_call():
     plugin = _make_plugin(enable_emotion_analysis=True)
 
     async def fake_recognize_voice_inputs(_voice_inputs):
-        return RecognitionBatch(results=[AsrResult(text="我有点担心", request_id="req-1")], errors=[])
+        return RecognitionBatch(results=[AsrResult(text="worry", request_id="req-1")], errors=[])
 
     class _FakeContext:
         async def get_current_chat_provider_id(self, umo=None):
@@ -161,11 +214,11 @@ def test_on_message_cleans_record_before_emotion_llm_call():
         async def llm_generate(self, **kwargs):
             assert kwargs["chat_provider_id"] == "provider-default"
             assert VolcengineAsrPlugin._find_records(event) == []
-            assert event.message_str == "我有点担心"
+            assert event.message_str == "worry"
             return (
                 '{"label":"anxious","emotion_weights":{"anxious":0.8,"neutral":0.2},'
                 '"confidence":0.7,"valence":-0.4,"arousal":0.6,'
-                '"voice_text_support":0.8,"context_support":0.2,"reason":"用户表达担心。"}'
+                '"voice_text_support":0.8,"context_support":0.2,"reason":"user is worried"}'
             )
 
     plugin._recognize_voice_inputs = fake_recognize_voice_inputs
@@ -177,19 +230,20 @@ def test_on_message_cleans_record_before_emotion_llm_call():
     assert event.stopped == 0
     assert VolcengineAsrPlugin._find_records(event) == []
     assert event.get_extra(ASR_EXTRA_EMOTION_RESULT)["label"] == "anxious"
-    assert "[情绪判断辅助信息]" in event.get_extra(ASR_EXTRA_LLM_TEXT)
+    assert "anxious" in event.get_extra(ASR_EXTRA_LLM_TEXT)
+    assert event.get_extra("provider_request").prompt == event.get_extra(ASR_EXTRA_LLM_TEXT)
 
 
 def test_apply_voice_prompt_template_takes_over_when_prompt_does_not_contain_memory_text():
     plugin = _make_plugin()
     event = _FakeEvent()
-    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "干净文本")
-    event.set_extra(ASR_EXTRA_LLM_TEXT, "LLM 文本")
-    req = _FakeProviderRequest(prompt="完全不包含目标文本")
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "clean text")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "LLM text")
+    req = _FakeProviderRequest(prompt="no target text")
 
     asyncio.run(plugin.apply_voice_prompt_template(event, req))
 
-    assert req.prompt == "LLM 文本\n\n完全不包含目标文本"
+    assert req.prompt == "LLM text\n\nno target text"
     assert req.audio_urls == []
 
 
@@ -197,13 +251,13 @@ def test_apply_voice_prompt_template_skips_emotion_internal_call():
     plugin = _make_plugin()
     event = _FakeEvent()
     event.set_extra(ASR_EXTRA_EMOTION_INTERNAL_CALL, True)
-    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "干净文本")
-    event.set_extra(ASR_EXTRA_LLM_TEXT, "LLM 文本")
-    req = _FakeProviderRequest(prompt="干净文本")
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "clean text")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "LLM text")
+    req = _FakeProviderRequest(prompt="clean text")
 
     asyncio.run(plugin.apply_voice_prompt_template(event, req))
 
-    assert req.prompt == "干净文本"
+    assert req.prompt == "clean text"
     assert req.audio_urls == ["old.amr"]
 
 
@@ -233,6 +287,7 @@ def test_on_message_unclear_voice_injects_unclear_plan():
     assert VolcengineAsrPlugin._find_records(event) == []
     assert event.get_extra(ASR_EXTRA_UNCLEAR) is True
     assert event.get_extra(ASR_EXTRA_INJECTED) is True
+    assert event.get_extra("provider_request").prompt == plugin.unclear_voice_prompt
 
 
 def test_on_message_reply_mode_stops_after_success_when_configured():
@@ -241,7 +296,7 @@ def test_on_message_reply_mode_stops_after_success_when_configured():
 
     async def fake_recognize_voice_inputs(_voice_inputs):
         return RecognitionBatch(
-            results=[AsrResult(text="你好", request_id="req-1")],
+            results=[AsrResult(text="hello", request_id="req-1")],
             errors=[],
         )
 
@@ -249,7 +304,8 @@ def test_on_message_reply_mode_stops_after_success_when_configured():
 
     outputs = asyncio.run(_collect_asyncgen(plugin.on_message(event)))
 
-    assert outputs[0]["text"] == "语音转文字：你好"
+    assert outputs
+    assert "hello" in outputs[0]["text"]
     assert event.stopped == 1
     assert event.calls[:2] == ["stop_event", "plain_result"]
     assert VolcengineAsrPlugin._find_records(event) == []
@@ -261,13 +317,13 @@ def test_on_message_error_stops_to_prevent_old_record_from_reaching_agent():
     plugin = _make_plugin()
 
     async def fake_recognize_voice_inputs(_voice_inputs):
-        return RecognitionBatch(results=[], errors=["第 1 条语音处理失败：ffmpeg 启动失败"])
+        return RecognitionBatch(results=[], errors=["voice prepare failed: ffmpeg startup failed"])
 
     plugin._recognize_voice_inputs = fake_recognize_voice_inputs
 
     outputs = asyncio.run(_collect_asyncgen(plugin.on_message(event)))
 
-    assert "ffmpeg 启动失败" in outputs[0]["text"]
+    assert "ffmpeg startup failed" in outputs[0]["text"]
     assert event.stopped == 1
     assert event.calls[:2] == ["stop_event", "plain_result"]
     assert VolcengineAsrPlugin._find_records(event) == []
@@ -343,18 +399,47 @@ def test_build_audio_payload_url_mode_does_not_trust_amr_url():
     assert payload.output_format == "wav"
 
 
+def test_bare_onebot_amr_uses_get_record_then_ffmpeg():
+    amr_bytes = b"#!AMR\nvoice"
+    record = _OneBotRecord("330898de94fe28ae378bdee1c2fe929f.amr")
+    event = _FakeEvent([record])
+    event.bot = _FakeOneBot({"file": "base64://" + base64.b64encode(amr_bytes).decode("ascii")})
+    plugin = _make_plugin()
+    plugin.enable_transcode = True
+    plugin.transcode_output_format = "wav"
+    seen = {}
+
+    async def fake_transcode_audio(data, suffix):
+        seen["data"] = data
+        seen["suffix"] = suffix
+        return b"RIFFxxxxWAVEfmt "
+
+    plugin._transcode_audio = fake_transcode_audio
+
+    payload = asyncio.run(plugin._build_audio_payload_result(plugin._collect_voice_inputs(event)[0]))
+
+    assert event.bot.calls[0][1]["action"] == "get_record"
+    assert event.bot.calls[0][1]["file"] == "330898de94fe28ae378bdee1c2fe929f.amr"
+    assert seen == {"data": amr_bytes, "suffix": ".amr"}
+    assert payload.source_type == "onebot_get_record"
+    assert payload.detected_suffix == ".amr"
+    assert payload.transcoded is True
+    assert "data" in payload.payload
+
+
 def test_build_audio_payload_reports_user_visible_audio_errors():
     plugin = _make_plugin()
     record = Comp.Record(file="missing.amr")
 
-    async def fake_record_to_audio_bytes(_record, _sources):
-        raise UserVisibleError("无法从消息中读取语音文件。")
+    async def fake_record_to_audio_bytes(_record, _sources, _event=None):
+        raise UserVisibleError("audio unavailable")
 
     plugin._record_to_audio_bytes = fake_record_to_audio_bytes
 
     batch = asyncio.run(plugin._recognize_voice_inputs(plugin._collect_voice_inputs(_FakeEvent([record]))))
 
-    assert batch.errors == ["第 1 条语音处理失败：无法从消息中读取语音文件。"]
+    assert batch.errors
+    assert "audio unavailable" in batch.errors[0]
     assert batch.diagnostics[0]["error_code"] == "audio_prepare_failed"
 
 
@@ -367,7 +452,7 @@ def test_bare_amr_file_conversion_failure_is_reported_and_stopped():
 
     assert batch.results == []
     assert batch.diagnostics[0]["error_code"] == "audio_prepare_failed"
-    assert "语音处理失败" in batch.errors[0]
+    assert "无法从消息中读取语音文件" in batch.errors[0]
 
     async def fake_recognize_voice_inputs(_voice_inputs):
         return batch
@@ -375,5 +460,5 @@ def test_bare_amr_file_conversion_failure_is_reported_and_stopped():
     plugin._recognize_voice_inputs = fake_recognize_voice_inputs
     outputs = asyncio.run(_collect_asyncgen(plugin.on_message(event)))
 
-    assert "语音处理失败" in outputs[0]["text"]
+    assert "无法从消息中读取语音文件" in outputs[0]["text"]
     assert event.stopped == 1

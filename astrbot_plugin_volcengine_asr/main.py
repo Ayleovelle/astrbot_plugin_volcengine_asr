@@ -30,6 +30,11 @@ try:
 except Exception:
     pass
 
+try:
+    from astrbot.core.provider.entities import ProviderRequest as CoreProviderRequest
+except Exception:
+    CoreProviderRequest = ProviderRequest
+
 
 VOLC_FLASH_ENDPOINT = (
     "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
@@ -240,6 +245,7 @@ class VoiceInput:
     index: int
     record: Any
     sources: list[str]
+    event: AstrMessageEvent | None = None
 
     def to_diagnostic(self) -> dict[str, Any]:
         return {
@@ -352,7 +358,7 @@ def _extract_record_sources(record: Any) -> list[str]:
                 sources.append(source)
 
     def append_from_mapping(data: dict[str, Any]) -> None:
-        for attr in ("base64", "path", "file", "url"):
+        for attr in ("base64", "path", "file", "file_id", "url"):
             value = data.get(attr)
             if attr == "base64" and value and not str(value).startswith("base64://"):
                 value = f"base64://{value}"
@@ -365,7 +371,7 @@ def _extract_record_sources(record: Any) -> list[str]:
             append_from_mapping(data)
         return sources
 
-    for attr in ("base64", "path", "file", "url"):
+    for attr in ("base64", "path", "file", "file_id", "url"):
         value = getattr(record, attr, None)
         if attr == "base64" and value and not str(value).startswith("base64://"):
             value = f"base64://{value}"
@@ -375,7 +381,7 @@ def _extract_record_sources(record: Any) -> list[str]:
     if isinstance(data, dict):
         append_from_mapping(data)
     elif data is not None:
-        for attr in ("base64", "path", "file", "url"):
+        for attr in ("base64", "path", "file", "file_id", "url"):
             value = getattr(data, attr, None)
             if attr == "base64" and value and not str(value).startswith("base64://"):
                 value = f"base64://{value}"
@@ -407,6 +413,34 @@ def _source_suffix(source: str) -> str:
         return ""
     parsed_path = urlparse(source).path if source.startswith(("http://", "https://")) else source
     return Path(unquote(parsed_path)).suffix.lower()
+
+
+def _onebot_record_result_source(result: Any) -> str:
+    if not result:
+        return ""
+    if isinstance(result, str):
+        return result.strip()
+
+    def from_mapping(data: dict[str, Any]) -> str:
+        for key in ("base64", "url", "file", "path"):
+            value = data.get(key)
+            if value:
+                return str(value).strip()
+        return ""
+
+    if isinstance(result, dict):
+        data = result.get("data")
+        if isinstance(data, dict):
+            nested = from_mapping(data)
+            if nested:
+                return nested
+        return from_mapping(result)
+
+    for attr in ("base64", "url", "file", "path"):
+        value = getattr(result, attr, None)
+        if value:
+            return str(value).strip()
+    return ""
 
 
 def _detect_audio_suffix(data: bytes, source: str = "") -> str:
@@ -462,6 +496,33 @@ def _plain_message_chain(text: str) -> list[Any]:
     return [Comp.Plain(text)]
 
 
+def _looks_like_message_chain(value: Any) -> bool:
+    if isinstance(value, list):
+        return True
+    if isinstance(value, (str, bytes, bytearray, dict)) or value is None:
+        return False
+    if _is_record_component(value):
+        return False
+    return any(hasattr(value, attr) for attr in ("chain", "message", "message_chain")) or (
+        value.__class__.__name__.lower() in {"messagechain", "messagechainobj"}
+    )
+
+
+def _message_chain_items(chain: Any) -> list[Any]:
+    if isinstance(chain, list):
+        return list(chain)
+    if isinstance(chain, (str, bytes, bytearray, dict)) or chain is None:
+        return []
+    for attr in ("chain", "message", "message_chain"):
+        value = getattr(chain, attr, None)
+        if isinstance(value, list):
+            return list(value)
+    try:
+        return list(chain)
+    except TypeError:
+        return []
+
+
 def _iter_message_chains(event: AstrMessageEvent) -> list[Any]:
     chains: list[Any] = []
     seen: set[int] = set()
@@ -471,18 +532,27 @@ def _iter_message_chains(event: AstrMessageEvent) -> list[Any]:
         if chain is None or depth > 8:
             return
         chain_id = id(chain)
-        if isinstance(chain, (list, dict)) and chain_id in visited:
+        if (isinstance(chain, dict) or _looks_like_message_chain(chain)) and chain_id in visited:
             return
-        if isinstance(chain, (list, dict)):
+        if isinstance(chain, dict) or _looks_like_message_chain(chain):
             visited.add(chain_id)
 
-        if isinstance(chain, list):
+        if _looks_like_message_chain(chain):
             if chain_id not in seen:
                 seen.add(chain_id)
                 chains.append(chain)
-            for item in list(chain):
+            items = _message_chain_items(chain)
+            for attr in ("chain", "message", "message_chain"):
+                value = getattr(chain, attr, None)
+                if isinstance(value, list):
+                    append_chain(value, depth + 1)
+            for item in items:
                 if isinstance(item, (list, dict)) or _is_record_component(item):
                     append_chain(item, depth + 1)
+                else:
+                    for attr in ("chain", "message", "message_chain", "raw_message", "content"):
+                        if hasattr(item, attr):
+                            append_chain(getattr(item, attr), depth + 1)
         elif _is_record_component(chain):
             if chain_id not in seen:
                 seen.add(chain_id)
@@ -528,10 +598,16 @@ def _iter_message_chains(event: AstrMessageEvent) -> list[Any]:
 
 def _mutate_message_chains_to_plain_text(event: AstrMessageEvent, text: str) -> None:
     for old_chain in _iter_message_chains(event):
+        replacement = _plain_message_chain(text)
+        for attr in ("chain", "message", "message_chain"):
+            nested_chain = getattr(old_chain, attr, None)
+            if isinstance(nested_chain, list):
+                nested_chain[:] = replacement
         try:
-            old_chain[:] = _plain_message_chain(text)
+            old_chain[:] = replacement
+            continue
         except Exception as exc:
-            logger.warning(f"原地清理旧语音消息链失败，已跳过该链：{exc}")
+            logger.warning(f"原地清理旧语音消息链切片失败，已尝试清理内部链：{exc}")
 
 
 def _replace_event_message_with_plain_text(event: AstrMessageEvent, text: str) -> None:
@@ -747,6 +823,19 @@ def _sanitize_event_cached_content(event: AstrMessageEvent, text: str) -> None:
 def _set_event_extras(event: AstrMessageEvent, extras: dict[str, Any]) -> None:
     for key, value in extras.items():
         event.set_extra(key, value)
+
+
+def _set_clean_provider_request(event: AstrMessageEvent, prompt: str) -> None:
+    try:
+        req = CoreProviderRequest()
+    except Exception as exc:
+        logger.warning(f"创建干净 ProviderRequest 失败，将回退到事件文本注入：{exc}")
+        return
+    req.prompt = prompt
+    req.image_urls = []
+    req.audio_urls = []
+    req.extra_user_content_parts = []
+    event.set_extra("provider_request", req)
 
 
 def _stop_voice_event_with_plain_text(
@@ -1497,6 +1586,7 @@ class VolcengineAsrPlugin(Star):
                 event.set_extra(ASR_EXTRA_EMOTION_RESULT, emotion_judgement.to_dict())
                 llm_text = _append_emotion_guidance(llm_text, emotion_judgement)
                 event.set_extra(ASR_EXTRA_LLM_TEXT, llm_text)
+            _set_clean_provider_request(event, llm_text)
             logger.info(
                 "已将语音识别结果注入为干净用户输入，"
                 f"memory_text={transcription_text}, llm_text={llm_text}"
@@ -1519,6 +1609,7 @@ class VolcengineAsrPlugin(Star):
                     diagnostics=batch.diagnostics,
                 ),
             )
+            _set_clean_provider_request(event, self.unclear_voice_prompt)
             logger.info(
                 "语音未识别到内容，已注入干净未听清事件文本，"
                 f"llm_text={self.unclear_voice_prompt}"
@@ -1601,7 +1692,7 @@ class VolcengineAsrPlugin(Star):
         records: list[Any] = []
         seen: set[int] = set()
         for chain in _iter_message_chains(event):
-            for component in chain:
+            for component in _message_chain_items(chain):
                 if _is_record_component(component) and id(component) not in seen:
                     seen.add(id(component))
                     records.append(component)
@@ -1610,7 +1701,12 @@ class VolcengineAsrPlugin(Star):
     @staticmethod
     def _collect_voice_inputs(event: AstrMessageEvent) -> list[VoiceInput]:
         return [
-            VoiceInput(index=index, record=record, sources=_extract_record_sources(record))
+            VoiceInput(
+                index=index,
+                record=record,
+                sources=_extract_record_sources(record),
+                event=event,
+            )
             for index, record in enumerate(VolcengineAsrPlugin._find_records(event), start=1)
         ]
 
@@ -1714,6 +1810,7 @@ class VolcengineAsrPlugin(Star):
         audio_bytes, source, source_type = await self._record_to_audio_bytes(
             voice_input.record,
             sources,
+            voice_input.event,
         )
         input_suffix = _source_suffix(source)
         detected_suffix = _detect_audio_suffix(audio_bytes, source)
@@ -1738,7 +1835,12 @@ class VolcengineAsrPlugin(Star):
             transcoded=transcoded,
         )
 
-    async def _record_to_audio_bytes(self, record: Any, sources: list[str]) -> tuple[bytes, str, str]:
+    async def _record_to_audio_bytes(
+        self,
+        record: Any,
+        sources: list[str],
+        event: AstrMessageEvent | None = None,
+    ) -> tuple[bytes, str, str]:
         last_error: Exception | None = None
         for source in sources:
             try:
@@ -1764,9 +1866,83 @@ class VolcengineAsrPlugin(Star):
             except Exception as exc:
                 last_error = exc
 
+        onebot_audio = await self._record_to_audio_bytes_via_onebot(event, sources)
+        if onebot_audio is not None:
+            return onebot_audio
+
+        if last_error and sources:
+            raise UserVisibleError("无法从消息中读取语音文件。请确认 NapCat/OneBot 可通过 get_record 取得原语音内容。") from last_error
         if last_error:
             raise UserVisibleError(str(last_error)) from last_error
         raise UserVisibleError("无法从消息中读取语音文件。")
+
+    async def _record_to_audio_bytes_via_onebot(
+        self,
+        event: AstrMessageEvent | None,
+        sources: list[str],
+    ) -> tuple[bytes, str, str] | None:
+        bot = getattr(event, "bot", None) if event is not None else None
+        call_action = getattr(bot, "call_action", None)
+        if not callable(call_action):
+            return None
+
+        for source in sources:
+            if not source or source.startswith(("base64://", "http://", "https://", "file://")):
+                continue
+            if _source_to_local_path(source) is not None:
+                continue
+            for output_format in (self.transcode_output_format, "wav", "mp3", "amr"):
+                try:
+                    result = await call_action(
+                        action="get_record",
+                        file=source,
+                        out_format=output_format,
+                    )
+                except TypeError:
+                    try:
+                        result = await call_action(
+                            "get_record",
+                            file=source,
+                            out_format=output_format,
+                        )
+                    except Exception as exc:
+                        logger.warning(f"OneBot get_record 获取语音失败：{exc}")
+                        continue
+                except Exception as exc:
+                    logger.warning(f"OneBot get_record 获取语音失败：{exc}")
+                    continue
+
+                loaded = await self._load_onebot_record_result(result, source)
+                if loaded is not None:
+                    return loaded
+        return None
+
+    async def _load_onebot_record_result(
+        self,
+        result: Any,
+        original_source: str,
+    ) -> tuple[bytes, str, str] | None:
+        candidate = _onebot_record_result_source(result)
+        if not candidate:
+            return None
+        if candidate.startswith("base64://"):
+            return (
+                base64.b64decode(candidate.removeprefix("base64://")),
+                "base64://onebot_get_record",
+                "onebot_get_record",
+            )
+        local_path = _source_to_local_path(candidate)
+        if local_path is not None:
+            return await self._file_to_bytes(local_path), str(local_path), "onebot_get_record"
+        if candidate.startswith(("http://", "https://")):
+            return await self._download_bytes(candidate), candidate, "onebot_get_record"
+        if len(candidate) > 64:
+            try:
+                return base64.b64decode(candidate), "base64://onebot_get_record", "onebot_get_record"
+            except Exception:
+                pass
+        logger.warning(f"OneBot get_record 返回了不可读取的语音来源：{candidate or original_source}")
+        return None
 
     async def _file_to_bytes(self, path: Path) -> bytes:
         size = path.stat().st_size

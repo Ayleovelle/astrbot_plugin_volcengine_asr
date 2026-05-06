@@ -45,6 +45,14 @@ class _Record:
         self.data = data
 
 
+class _ProviderRequest:
+    def __init__(self):
+        self.prompt = ""
+        self.image_urls = []
+        self.audio_urls = []
+        self.extra_user_content_parts = []
+
+
 class _Timeout:
     def __init__(self, *args, **kwargs):
         pass
@@ -68,7 +76,7 @@ event.AstrMessageEvent = object
 event.filter = _Filter()
 
 provider = types.ModuleType("astrbot.api.provider")
-provider.ProviderRequest = object
+provider.ProviderRequest = _ProviderRequest
 
 class _Star:
     def __init__(self, context=None):
@@ -81,6 +89,8 @@ star.Star = _Star
 
 core_star = types.ModuleType("astrbot.core.star.star")
 core_star.StarMetadata = type("StarMetadata", (), {})
+core_provider_entities = types.ModuleType("astrbot.core.provider.entities")
+core_provider_entities.ProviderRequest = _ProviderRequest
 
 httpx = types.ModuleType("httpx")
 httpx.Timeout = _Timeout
@@ -95,5 +105,7 @@ sys.modules["astrbot.api.provider"] = provider
 sys.modules["astrbot.api.star"] = star
 sys.modules.setdefault("astrbot.core", types.ModuleType("astrbot.core"))
 sys.modules.setdefault("astrbot.core.star", types.ModuleType("astrbot.core.star"))
+sys.modules.setdefault("astrbot.core.provider", types.ModuleType("astrbot.core.provider"))
 sys.modules["astrbot.core.star.star"] = core_star
+sys.modules["astrbot.core.provider.entities"] = core_provider_entities
 sys.modules["httpx"] = httpx

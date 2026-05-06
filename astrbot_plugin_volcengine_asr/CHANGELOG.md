@@ -1,5 +1,17 @@
 # 更新说明
 
+## v2.1.2 - 绕过内置 agent 媒体扫描
+
+### 主要变更
+
+- 继续修复 AstrBot v4.24.2 内置 agent 在 `build_main_agent()` 阶段扫描旧语音段并报 `not a valid file: xxx.amr` 的问题。
+- 查明报错并不发生在本插件 ffmpeg 转码阶段，而是 AstrBot 内置 agent 构造 `ProviderRequest` 前遍历 `event.message_obj.message` 和 `Reply.chain`，对残留 `Record` 调用 `convert_to_file_path()`。
+- 成功识别和未听清注入路径会提前写入干净 `provider_request`，让内置 agent 直接使用纯文本请求，绕过媒体附件扫描分支。
+- `_find_records()` 兼容非 `list` 的 `MessageChain` 对象，包括只暴露 `.chain` 且本体不可迭代的真实 AstrBot 消息链，避免漏掉 `Record`。
+- 消息链替换会原地改写 `MessageChain.chain`，防止旧对象引用继续把 `.amr` 语音段带入默认 agent。
+- 裸 OneBot / NapCat `Record(file="xxx.amr")` 在组件 `convert_to_base64()` 失败后会尝试 `get_record(file, out_format)`，取回真实 AMR 内容后再进入插件 ffmpeg 转码链路。
+- README 同步补充 2.1.2 排障说明，提示升级后可通过干净 `provider_request` 绕开媒体扫描，并支持非 list `MessageChain`。
+
 ## v2.1.1 - 清理情绪判断与直接回复路径的语音残留
 
 ### 主要变更

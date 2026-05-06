@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.1.1-brightgreen.svg" alt="Version 2.1.1">
+  <img src="https://img.shields.io/badge/Version-2.1.2-brightgreen.svg" alt="Version 2.1.2">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License MIT">
@@ -125,6 +125,14 @@ VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest
 - 情绪判断前会先清理当前语音 `Record`，再把转写文本和可用上下文交给情绪判断 LLM。
 - 识别失败、配置错误、未听清直接提示、`reply_transcription=true` 直接回复转写等不需要默认 LLM 继续处理原语音的路径，会先 `stop_event()`，再发送回复。
 - 这样可以避免后续 agent 或媒体转换逻辑继续读取裸 `.amr` 文件名，减少 `not a valid file: xxx.amr`。
+
+## 2.1.2 干净 ProviderRequest 修复
+
+`2.1.2` 继续修复 AstrBot 内置 agent 的前置媒体扫描问题：`build_main_agent` 在构造 `ProviderRequest` 前会扫描 `event.message_obj.message` / `Reply.chain`，如果里面还有 `Record(file="xxx.amr")`，就可能触发 `Record.convert_to_file_path()` 并报 `not a valid file: xxx.amr`。
+
+- 新增干净 `provider_request`，在默认 agent 构造请求前绕开本轮语音媒体扫描，让主 LLM 只接收转写后的文本。
+- 清理逻辑兼容非 list 形态的 `MessageChain`，避免消息链不是普通 list 时留下旧 `Record`。
+- 当 OneBot / NapCat 只给出裸 `file="xxx.amr"` 且组件自身 `convert_to_base64()` 失败时，插件会尝试调用 `get_record(file, out_format)` 取回真实语音内容，再交给 `ffmpeg` 转码。
 
 ## 重建后的语音工作流
 
@@ -783,18 +791,21 @@ ffmpeg_path = /usr/bin/ffmpeg
 Error occurred while processing agent: not a valid file: d288c78e8c3716a65e75983adcdd4a5a.amr
 ```
 
-通常不是火山 ASR 不支持 AMR，而是消息在识别成功后继续流向 agent 阶段时，旧消息链里还残留了 OneBot / NapCat 的 `Record(file="xxx.amr")`。这类 `file` 很多时候只是平台临时文件名，不是 AstrBot 机器上的真实本地路径，所以后续组件把它当文件校验时会报错。
+通常不是火山 ASR 不支持 AMR，也不是插件 `ffmpeg` 转码阶段失败，而是消息在识别成功后继续流向 agent 阶段时，旧消息链里还残留了 OneBot / NapCat 的 `Record(file="xxx.amr")`。这类 `file` 很多时候只是平台临时文件名，不是 AstrBot 机器上的真实本地路径，所以后续组件把它当文件校验时会报错。
 
-`2.1.1` 继续加固了这条链路：
+`2.1.2` 继续加固了这条链路：
 
 - 情绪判断前会先清理当前语音 `Record`，避免情绪判断路径把旧 `.amr` 残留带到后续 agent。
 - 识别失败、配置错误、未听清直接提示、`reply_transcription=true` 直接回复转写等直接回复路径，会先 `stop_event()` 再发送回复，避免默认 agent 继续处理原语音。
 - 识别成功或未听清注入时，会把 `event.message`、`event.message_chain`、`event.raw_message`、`message_obj.message`、`message_obj.message_chain`、`message_obj.raw_message` 等常见入口同步替换为纯 `Plain` 文本。
 - 替换前会先原地改写旧消息链 list。即使 AstrBot 或其他插件已经持有旧 list 引用，也会看到纯文本，而不是旧 `Record(file="xxx.amr")`。
+- 对 AstrBot 内置 agent `build_main_agent` 的前置扫描路径，`2.1.2` 会额外提供干净 `provider_request`，绕开 `event.message_obj.message` / `Reply.chain` 中残留媒体段被扫描和转换。
+- 消息链清理支持非 list `MessageChain`，避免链对象不是普通 list 时跳过清理。
 - LLM 请求阶段会清空 `ProviderRequest.audio_urls`，并净化 `contexts`、`extra_user_content_parts`、`messages`、`content`、`files` 等可能残留音频附件的字段。
 - 语音段查找兼容 `message`、`message_chain`、`raw_message`、裸 OneBot `record` dict 以及嵌套 dict 形态。
+- 对只有裸 `file="xxx.amr"` 的 OneBot / NapCat 语音，插件会先尝试组件 `convert_to_base64()`；失败后再尝试 OneBot `get_record` 获取真实语音内容。拿到 AMR bytes 后仍会正常进入插件 `ffmpeg` 转码链路。
 
-如果你仍然看到这个错误，请先确认安装的是 Release 页面中的 `2.1.1` 或更高版本 zip，并重启 AstrBot。然后检查平台是否只提供了裸文件名、没有可下载 URL 或 base64 数据；这种情况下插件会尽量走 `convert_to_base64()`，但平台适配器本身也需要能取得原语音内容。
+如果你仍然看到这个错误，请先确认安装的是 Release 页面中的 `2.1.2` 或更高版本 zip，并重启 AstrBot。然后检查平台是否只提供了裸文件名、没有可下载 URL 或 base64 数据；这种情况下插件会尽量走 `convert_to_base64()`，但平台适配器本身也需要能取得原语音内容。
 
 ### URL 模式失败
 
@@ -971,11 +982,13 @@ python3 scripts/build_release_zip.py
 
 ## 版本说明
 
-当前版本：`2.1.1`
+当前版本：`2.1.2`
 
 本版本重点：
 
 - 重新构建语音工作流：`VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest`。
+- 新增干净 `provider_request`，绕开 AstrBot 内置 agent `build_main_agent` 在构造请求前对 `event.message_obj.message` / `Reply.chain` 的媒体扫描，并兼容非 list `MessageChain`。
+- 裸 OneBot / NapCat `Record(file="xxx.amr")` 会在组件转换失败后尝试 `get_record(file, out_format)`，确保能取到真实 AMR 内容并交给 ffmpeg 转码。
 - 情绪判断前先清理语音 `Record`，直接回复和失败路径先 `stop_event()` 再回复，避免 `not a valid file: xxx.amr`。
 - `emotion_model_id` 在 WebUI 中支持点击选择已配置模型；留空时使用当前会话默认模型。
 - 成功识别后，消息阶段只写入干净 `Plain` 文本，LLM 请求阶段再应用语音提示词和情绪辅助。
