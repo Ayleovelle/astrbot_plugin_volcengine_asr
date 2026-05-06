@@ -586,7 +586,7 @@ $$
 
 $$
 w
-= \operatorname{clamp}(\tilde{w}, 0, w_{\max})
+= \mathrm{clamp}(\tilde{w}, 0, w_{\max})
 = \min\left(\max(\tilde{w}, 0), w_{\max}\right)
 $$
 
@@ -652,7 +652,7 @@ $$
 但语音对话中还存在一个隐变量：
 
 $$
-Z = \operatorname{Emotion}(T, \mathrm{Ctx})
+Z = \mathrm{Emotion}(T, \mathrm{Ctx})
 $$
 
 $Z$ 不应被视为事实，只能被视为对用户会话状态的弱推断。如果直接把 $Z$ 写入消息链，系统会产生两个风险：
@@ -673,10 +673,10 @@ $$
 单标签情绪判断可以写作：
 
 $$
-z = \operatorname*{arg\,max}_{i} p_i
+z = \mathrm{arg\,max}_{i} p_i
 $$
 
-但语音短句经常具有多义性。比如“没事”可能是轻松、疲惫、委屈，也可能是话题结束。只保留 $\operatorname*{arg\,max}$ 会抹掉不确定性。保留分布 $\mathbf{p}$ 可以进一步计算熵：
+但语音短句经常具有多义性。比如“没事”可能是轻松、疲惫、委屈，也可能是话题结束。只保留 $\mathrm{arg\,max}$ 会抹掉不确定性。保留分布 $\mathbf{p}$ 可以进一步计算熵：
 
 $$
 H(\mathbf{p}) = -\sum_i p_i \ln p_i
@@ -725,7 +725,7 @@ $$
 它只声明：
 
 $$
-\mathrm{Response} = \operatorname{LLM}(T, \mathrm{Ctx}, A_{\mathrm{w}})
+\mathrm{Response} = \mathrm{LLM}(T, \mathrm{Ctx}, A_{\mathrm{w}})
 $$
 
 其中 $A_{\mathrm{w}}$ 是弱辅助变量。主 LLM 必须优先服从用户明确请求和系统规则。
@@ -930,7 +930,7 @@ submit_mode = base64
 $$
 m_{\mathrm{submit}} =
 \begin{cases}
-\mathrm{url}, & \operatorname{ext}(u) \in \{\mathrm{wav}, \mathrm{mp3}, \mathrm{ogg}, \mathrm{opus}\} \land \operatorname{reachable}(u) \\
+\mathrm{url}, & \mathrm{ext}(u) \in \{\mathrm{wav}, \mathrm{mp3}, \mathrm{ogg}, \mathrm{opus}\} \land \mathrm{reachable}(u) \\
 \mathrm{base64}, & \text{otherwise}
 \end{cases}
 $$
