@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.1.4-brightgreen.svg" alt="Version 2.1.4">
+  <img src="https://img.shields.io/badge/Version-2.1.5-brightgreen.svg" alt="Version 2.1.5">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License MIT">
@@ -762,11 +762,13 @@ notify_asr_error = true
 
 状态检查适合用于确认：
 
+- 当前插件版本和仓库 URL，确认 AstrBot 更新器能找到仓库。
 - 是否已配置鉴权。
 - 当前是否启用自动识别。
 - 当前提交模式是 `base64` 还是 `url`。
 - 是否启用转码。
 - 当前是否优先使用内置 `ffmpeg`。
+- `ffmpeg` 是否真正可启动，以及官方 `preprocess_stage` warning 是否属于插件前置阶段。
 
 ## 常见问题与排障
 
@@ -802,6 +804,46 @@ ffmpeg_path = /usr/bin/ffmpeg
 ```
 
 路径按你的实际系统修改。
+
+### preprocess_stage 提示 Voice processing failed: not a valid file: xxx.amr
+
+如果日志里出现：
+
+```text
+[preprocess_stage.stage:81]: Voice processing failed: not a valid file: xxx.amr
+```
+
+先看一件事：关闭本插件后这条 warning 是否仍然出现。
+
+如果关闭本插件仍出现，说明它发生在本插件 handler 之前，是 AstrBot 官方 `PreProcessStage` 在尝试把 `Record(file="xxx.amr")` 转成本地 WAV。这个阶段不等于本插件 ffmpeg 转码，也不等于火山 ASR 失败。
+
+AstrBot v4.24.2 的官方预处理大致会做：
+
+```text
+event.get_messages()
+  -> 找到 Record
+  -> component.convert_to_file_path()
+  -> ensure_wav(original_path)
+  -> 写回 component.file / component.path
+```
+
+在 Ubuntu 宝塔面板 Docker 里，这条 warning 很常见：NapCat / OneBot 给出的 `xxx.amr` 可能是 NapCat 容器里的临时文件名，或只是 OneBot file id，并不是 AstrBot 容器内真实存在的路径。
+
+排查顺序：
+
+1. AstrBot 官方 STT 不用时，确认 `provider_stt_settings.enable=false`，并清空或不配置 `provider_stt_settings.provider_id`。
+2. 如果还出现 warning，继续检查 `platform_settings.path_mapping` 和 Docker volume。官方 Record 转 WAV 预处理不完全受 STT 开关控制。
+3. 如果 NapCat 和 AstrBot 分在不同容器，尽量让两边共享同一个数据目录，例如都能看到 `/AstrBot/data`。
+4. 保持本插件 `submit_mode=base64`，让插件通过 OneBot `get_record(file, out_format)` 尝试取回真实语音内容，再交给插件自己的 ffmpeg 转码链路。
+5. 插件开启后重点观察是否还出现 `agent_sub_stages.internal:402` 的 `not a valid file: xxx.amr`。如果只剩 `preprocess_stage` warning，而没有 agent 阶段 error，说明插件后续接管链路已经生效，剩下的是官方前置预处理与 Docker/NapCat 文件可读性问题。
+
+简短判断：
+
+```text
+preprocess_stage warning = 官方预处理在插件之前读不到 Record 文件
+agent_sub_stages error = 官方 agent 后续仍扫到旧 Record
+本插件 ffmpeg 失败 = 日志通常会出现在“语音识别准备失败”或 /volc_asr_status 的 ffmpeg状态中
+```
 
 ### Agent 阶段报 not a valid file: xxx.amr
 
@@ -1002,7 +1044,7 @@ python3 scripts/build_release_zip.py
 
 ## 版本说明
 
-当前版本：`2.1.4`
+当前版本：`2.1.5`
 
 本版本重点：
 

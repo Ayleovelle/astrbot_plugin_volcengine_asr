@@ -1,5 +1,14 @@
 # 更新说明
 
+## v2.1.5 - 增强 Docker / NapCat / 官方预处理排障信息
+
+### 主要变更
+
+- `/volc_asr_status` 增加插件版本、仓库地址和官方 `preprocess_stage` 责任边界提示。
+- README 在常见问题中单独补充 AstrBot 官方语音预处理 warning、Docker 共享卷、NapCat `get_record` 和官方 STT 配置的排障说明。
+- 说明 `preprocess_stage.stage:81 Voice processing failed` 发生在插件 handler 之前，关闭本插件仍可能出现；插件开启后应重点观察是否还进入 `agent_sub_stages` 的旧 Record 媒体扫描。
+- 本版本不改变 ASR、ffmpeg、ProviderRequest 注入或消息链清理主逻辑。
+
 ## v2.1.4 - 修复 AstrBot 更新器仓库地址与官方 agent 重入
 
 ### 主要变更

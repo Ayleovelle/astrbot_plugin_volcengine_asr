@@ -42,6 +42,8 @@ VOLC_FLASH_ENDPOINT = (
 VOLC_RESOURCE_ID = "volc.bigasr.auc_turbo"
 VOLC_SUCCESS_CODE = "20000000"
 VOLC_SILENT_AUDIO_CODE = "20000003"
+PLUGIN_VERSION = "2.1.5"
+PLUGIN_REPO_URL = "https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr"
 SUPPORTED_AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".opus"}
 TRANSCODE_HINT_EXTS = {".amr", ".silk", ".slk", ".m4a", ".aac", ".flac", ".webm"}
 FFMPEG_PROBE_TIMEOUT_SECONDS = 5
@@ -1433,6 +1435,8 @@ class VolcengineAsrPlugin(Star):
         state = self.get_webui_state()
         yield event.plain_result(
             "火山引擎语音识别插件状态："
+            f"\n版本：{state['version']}"
+            f"\n仓库：{state['repo']}"
             f"\n鉴权：{'已配置' if state['auth_configured'] else '未配置'}"
             f"\n提交方式：{state['submit_mode_label']}"
             f"\n处理方式：{state['handling_mode']}"
@@ -1446,6 +1450,8 @@ class VolcengineAsrPlugin(Star):
             f"\n情绪判断：{'启用' if state['emotion']['enabled'] else '关闭'}"
             f"\n情绪模型：{state['emotion']['model_id']}"
             f"\n情绪最大参考权重：{state['emotion']['max_respect_weight_percent']}%"
+            "\n官方预处理提示：preprocess_stage 的 Voice processing failed 发生在插件 handler 之前；"
+            "若关闭插件仍出现，请检查 AstrBot 官方 STT/预处理、NapCat get_record 或 Docker 共享卷。"
         )
 
     def get_webui_state(self) -> dict[str, Any]:
@@ -1456,6 +1462,8 @@ class VolcengineAsrPlugin(Star):
         auth_error = self.client.validate()
         return {
             "schema_version": 1,
+            "version": PLUGIN_VERSION,
+            "repo": PLUGIN_REPO_URL,
             "auth_configured": not auth_error,
             "auth_mode": "api_key" if self.client.api_key else "app_key_access_key" if self.client.app_key and self.client.access_key else "none",
             "validation_error": auth_error,
