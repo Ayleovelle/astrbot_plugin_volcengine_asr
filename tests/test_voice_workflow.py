@@ -97,6 +97,18 @@ class _FakeProviderRequest:
         ]
 
 
+class _FakeRunContext:
+    def __init__(self, event=None):
+        self.event = event
+        self.provider_request = _FakeProviderRequest(prompt="cached.amr")
+        self.messages = [
+            {"role": "user", "content": [{"type": "record", "data": {"file": "run-context.amr"}}]}
+        ]
+        self.stage_data = {
+            "payload": {"message": [{"type": "record", "data": {"file": "stage-data.amr"}}]}
+        }
+
+
 class _NonIterableMessageChain:
     def __init__(self, items):
         self.chain = list(items)
@@ -466,6 +478,59 @@ def test_agent_begin_cleanup_removes_records_from_extra_cache_shapes():
     assert provider_request.prompt == "hello"
     assert provider_request.audio_urls == []
     assert provider_request.files == []
+
+
+def test_agent_begin_cleanup_sanitizes_unknown_extra_cache_keys():
+    event = _FakeEvent()
+    event.message = []
+    event.message_chain = []
+    event.raw_message = []
+    event.message_obj.message = []
+    event.message_obj.message_chain = []
+    event.message_obj.raw_message = []
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "hello")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "hello[voice prompt]")
+    event.extras["agent_state"] = {
+        "payload": {"message": [{"type": "record", "data": {"file": "hidden.amr"}}]}
+    }
+    event.message_obj.extras["cache"] = {
+        "stage_data": [{"type": "record", "data": {"file": "cache.amr"}}],
+        "note": "keep me",
+    }
+    event.extras["plain_state"] = {"message": "keep text", "count": 2}
+    event.message_obj.extras["plain_cache"] = {"files": ["report.txt"], "path": "/tmp/report.txt"}
+
+    assert VolcengineAsrPlugin._find_records(event)
+
+    _ensure_clean_voice_event_for_agent(event)
+
+    assert VolcengineAsrPlugin._find_records(event) == []
+    assert event.extras["agent_state"]["payload"]["message"][0].text == "hello"
+    assert event.message_obj.extras["cache"] == {"stage_data": [], "note": "keep me"}
+    assert event.extras["plain_state"] == {"message": "keep text", "count": 2}
+    assert event.message_obj.extras["plain_cache"] == {"files": ["report.txt"], "path": "/tmp/report.txt"}
+
+
+def test_agent_begin_cleanup_sanitizes_run_context_caches():
+    event = _FakeEvent()
+    event.message = []
+    event.message_chain = []
+    event.raw_message = []
+    event.message_obj.message = []
+    event.message_obj.message_chain = []
+    event.message_obj.raw_message = []
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "hello")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "hello[voice prompt]")
+    run_context = _FakeRunContext(event=event)
+
+    _ensure_clean_voice_event_for_agent(event, run_context)
+
+    assert run_context.event is event
+    assert run_context.provider_request.audio_urls == []
+    assert run_context.provider_request.files == []
+    assert run_context.provider_request.prompt == "hello[voice prompt]"
+    assert run_context.messages == [{"role": "user", "content": []}]
+    assert run_context.stage_data["payload"]["message"][0].text == "hello"
 
 
 def test_on_message_success_cleans_extra_cache_shapes_before_agent_stage():

@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.1.8-brightgreen.svg" alt="Version 2.1.8">
+  <img src="https://img.shields.io/badge/Version-2.1.9-brightgreen.svg" alt="Version 2.1.9">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License MIT">
@@ -125,6 +125,15 @@ VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest
 - 情绪判断前会先清理当前语音 `Record`，再把转写文本和可用上下文交给情绪判断 LLM。
 - 识别失败、配置错误、未听清直接提示、`reply_transcription=true` 直接回复转写等不需要默认 LLM 继续处理原语音的路径，会先 `stop_event()`，再发送回复。
 - 这样可以避免后续 agent 或媒体转换逻辑继续读取裸 `.amr` 文件名，减少 `not a valid file: xxx.amr`。
+
+## 2.1.9 agent 前未知缓存与 run_context 清理加固
+
+`2.1.9` 继续收紧 `agent_sub_stages.internal:402` 前的兜底清理。它不改变火山 ASR、ffmpeg 转码或情绪判断主链路，只在 AstrBot 即将构建 agent 时，再清理一轮可能藏着旧 `Record(file="xxx.amr")` 的缓存。
+
+- `on_agent_begin` 现在会接收 `run_context`，并清理其中的 `messages`、`stage_data`、`cache`、`payload` 等可见缓存字段。
+- `event.extras` / `message_obj.extras` 里的未知缓存 key 也会递归净化，减少其它插件或适配器把旧 `.amr` 残留带进官方 agent 的概率。
+- 清理时会保留 `ProviderRequest` 对象和事件对象引用，例如 `run_context.event`，避免把 AstrBot 后续还要使用的活对象改坏。
+- 这仍然不是 AstrBot 私有 pipeline monkey patch。官方 `preprocess_stage` 仍发生在插件 handler 之前；如果只剩 `preprocess_stage` warning，请继续按 Docker 共享卷、NapCat `get_record` 和官方预处理路径排查。
 
 ## 2.1.8 异形缓存 Record 兜底与情绪权重接口
 
@@ -854,7 +863,7 @@ event.get_messages()
 2. 如果还出现 warning，继续检查 `platform_settings.path_mapping` 和 Docker volume。官方 Record 转 WAV 预处理不完全受 STT 开关控制。
 3. 如果 NapCat 和 AstrBot 分在不同容器，尽量让两边共享同一个数据目录，例如都能看到 `/AstrBot/data`。
 4. 保持本插件 `submit_mode=base64`，让插件通过 OneBot `get_record(file, out_format)` 尝试取回真实语音内容，再交给插件自己的 ffmpeg 转码链路。
-5. `2.1.8` 起，插件也会扫描 `event.extras` / `message_obj.extras` 等缓存里的嵌套 `Record`，减少异形缓存把旧 `.amr` 带进 agent 的概率。
+5. `2.1.7` 起，插件也会扫描 `event.extras` / `message_obj.extras` 等缓存里的嵌套 `Record`；`2.1.9` 会在 agent 前进一步净化未知 extras 和 `run_context` 缓存，减少旧 `.amr` 带进 agent 的概率。
 6. 插件开启后重点观察是否还出现 `agent_sub_stages.internal:402` 的 `not a valid file: xxx.amr`。如果只剩 `preprocess_stage` warning，而没有 agent 阶段 error，说明插件后续接管链路已经生效，剩下的是官方前置预处理与 Docker/NapCat 文件可读性问题。
 
 简短判断：
@@ -1064,7 +1073,7 @@ python3 scripts/build_release_zip.py
 
 ## 版本说明
 
-当前版本：`2.1.8`
+当前版本：`2.1.9`
 
 本版本重点：
 

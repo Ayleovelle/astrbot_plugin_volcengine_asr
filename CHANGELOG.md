@@ -1,5 +1,16 @@
 # 更新说明
 
+## v2.1.9 - 加固 agent 前未知缓存与 run_context 清理
+
+### 主要变更
+
+- 继续修复真实 AstrBot v4.24.2 场景中 `agent_sub_stages.internal:402` 仍可能读取旧 `Record(file="xxx.amr")` 的后段残留问题。
+- `on_agent_begin` 现在会把 AstrBot 传入的 `run_context` 一并交给兜底清理，覆盖 `messages`、`stage_data`、`cache`、`payload` 等可见缓存字段。
+- `event.extras` / `message_obj.extras` 的清理从固定字段扩展到未知缓存 key，递归移除其中嵌套的 record/audio/file/path 等音频残留。
+- 清理时会保留 `ProviderRequest` 对象和事件对象引用，例如 `run_context.event`，避免把后续 agent 阶段仍需使用的活对象替换成普通 dict/list。
+- 新增回归测试覆盖未知 extras 缓存、run_context 缓存，以及 `run_context.event` 引用保持不变。
+- 本版本仍不做 AstrBot 私有 pipeline monkey patch；官方 `preprocess_stage` warning 仍需从 AstrBot/NapCat/Docker 文件路径侧排查。
+
 ## v2.1.8 - 修复 agent 缓存残留并抽出情绪权重接口
 
 ### 主要变更

@@ -50,7 +50,7 @@ VOLC_FLASH_ENDPOINT = (
 VOLC_RESOURCE_ID = "volc.bigasr.auc_turbo"
 VOLC_SUCCESS_CODE = "20000000"
 VOLC_SILENT_AUDIO_CODE = "20000003"
-PLUGIN_VERSION = "2.1.8"
+PLUGIN_VERSION = "2.1.9"
 PLUGIN_REPO_URL = "https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr"
 SUPPORTED_AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".opus"}
 TRANSCODE_HINT_EXTS = {".amr", ".silk", ".slk", ".m4a", ".aac", ".flac", ".webm"}
@@ -811,6 +811,45 @@ def _sanitize_content_parts(parts: Any, fallback_text: str) -> list[Any]:
     return cleaned
 
 
+def _contains_sanitizable_voice_reference(value: Any, depth: int = 0) -> bool:
+    if value is None or depth > 8:
+        return False
+    if _is_record_component(value) or _looks_like_audio_reference(value):
+        return True
+    if _looks_like_provider_request(value) or _is_event_like(value):
+        return False
+    if isinstance(value, list):
+        return any(_contains_sanitizable_voice_reference(item, depth + 1) for item in value)
+    if isinstance(value, dict):
+        value_type = _content_type(value)
+        if value_type in {"audio", "audio_url", "input_audio", "file", "record"}:
+            return True
+        for key, item in value.items():
+            key_text = str(key).lower()
+            if key_text in {
+                "audio",
+                "audio_url",
+                "audio_urls",
+                "audios",
+                "file",
+                "file_url",
+                "file_urls",
+                "files",
+                "path",
+                "record",
+                "records",
+                "url",
+            } and (_looks_like_audio_reference(item) or _is_record_component(item)):
+                return True
+            if _contains_sanitizable_voice_reference(item, depth + 1):
+                return True
+        return False
+    object_dict = _object_to_sanitizable_dict(value)
+    if object_dict is not None:
+        return _contains_sanitizable_voice_reference(object_dict, depth + 1)
+    return False
+
+
 def _sanitize_provider_request(req: ProviderRequest, memory_text: str, llm_text: str) -> None:
     if hasattr(req, "audio_urls"):
         req.audio_urls = []
@@ -844,6 +883,58 @@ def _sanitize_provider_request(req: ProviderRequest, memory_text: str, llm_text:
         req.prompt = llm_text
 
 
+def _set_sanitized_attr(owner: Any, attr: str, fallback_text: str) -> None:
+    try:
+        value = getattr(owner, attr)
+    except Exception:
+        return
+    if _is_event_like(value) or _looks_like_provider_request(value):
+        return
+    if not _contains_sanitizable_voice_reference(value):
+        return
+    sanitized = _sanitize_content_value(value, fallback_text)
+    try:
+        setattr(owner, attr, sanitized)
+    except Exception:
+        return
+
+
+def _is_event_like(value: Any) -> bool:
+    return value is not None and hasattr(value, "get_extra") and hasattr(value, "set_extra")
+
+
+def _sanitize_visible_object_caches(owner: Any, fallback_text: str) -> None:
+    if owner is None or isinstance(owner, (str, bytes, bytearray, dict, list)) or _is_event_like(owner):
+        return
+    for attr in (
+        "attachments",
+        "audios",
+        "cache",
+        "content",
+        "context",
+        "contexts",
+        "data",
+        "extra_user_content_parts",
+        "files",
+        "input",
+        "media",
+        "message",
+        "message_chain",
+        "messages",
+        "metadata",
+        "original_message",
+        "payload",
+        "raw_content",
+        "raw_message",
+        "request",
+        "segments",
+        "stage_data",
+        "tools",
+    ):
+        if hasattr(owner, attr):
+            _set_sanitized_attr(owner, attr, fallback_text)
+
+
 def _sanitize_event_cached_content(event: AstrMessageEvent, text: str) -> None:
     containers = []
     seen_containers: set[int] = set()
@@ -861,23 +952,33 @@ def _sanitize_event_cached_content(event: AstrMessageEvent, text: str) -> None:
             key_text = str(key).lower()
             if key_text.startswith("volcengine_asr_"):
                 continue
-            if key_text in {
-                "content",
-                "context",
-                "contexts",
-                "data",
-                "input",
-                "message",
-                "message_chain",
-                "messages",
-                "original_message",
-                "raw_message",
-                "request",
-                "segments",
-            }:
-                container[key] = _sanitize_content_value(container[key], text)
-            elif key_text in {"audio", "audio_url", "audio_urls", "audios", "file", "files", "record", "records"}:
+            if key_text in {"audio", "audio_url", "audio_urls", "audios", "file", "files", "record", "records"}:
                 container[key] = []
+                continue
+            if key_text in {"provider_request", "request", "req", "llm_request"} and _looks_like_provider_request(
+                container[key]
+            ):
+                continue
+            if not _contains_sanitizable_voice_reference(container[key]):
+                continue
+            container[key] = _sanitize_content_value(container[key], text)
+
+
+def _sanitize_run_context_cached_content(run_context: Any, memory_text: str, llm_text: str) -> None:
+    if run_context is None:
+        return
+    _sanitize_visible_object_caches(run_context, memory_text)
+    if _looks_like_provider_request(run_context):
+        _sanitize_provider_request(run_context, memory_text, llm_text)
+    for attr in ("provider_request", "request", "req", "llm_request"):
+        try:
+            value = getattr(run_context, attr)
+        except Exception:
+            continue
+        if _looks_like_provider_request(value):
+            _sanitize_provider_request(value, memory_text, llm_text)
+        elif value is not run_context:
+            _sanitize_visible_object_caches(value, memory_text)
 
 
 def _set_event_extras(event: AstrMessageEvent, extras: dict[str, Any]) -> None:
@@ -891,7 +992,7 @@ def _set_clean_provider_request(event: AstrMessageEvent, prompt: str) -> None:
         event.set_extra("provider_request", req)
 
 
-def _ensure_clean_voice_event_for_agent(event: AstrMessageEvent) -> None:
+def _ensure_clean_voice_event_for_agent(event: AstrMessageEvent, run_context: Any | None = None) -> None:
     memory_text = event.get_extra(ASR_EXTRA_MEMORY_TEXT, "")
     llm_text = event.get_extra(ASR_EXTRA_LLM_TEXT, "")
     if not isinstance(memory_text, str) or not memory_text.strip():
@@ -903,6 +1004,7 @@ def _ensure_clean_voice_event_for_agent(event: AstrMessageEvent) -> None:
     req = event.get_extra("provider_request", None)
     if _looks_like_provider_request(req):
         _sanitize_provider_request(req, memory_text, llm_text)
+    _sanitize_run_context_cached_content(run_context, memory_text, llm_text)
 
 
 def _build_clean_provider_request(prompt: str) -> Any | None:
@@ -1799,7 +1901,7 @@ class VolcengineAsrPlugin(Star):
         """在 AstrBot 构建 agent 前兜底清理旧 Record 缓存。"""
         if event.get_extra(ASR_EXTRA_EMOTION_INTERNAL_CALL, False):
             return
-        _ensure_clean_voice_event_for_agent(event)
+        _ensure_clean_voice_event_for_agent(event, run_context)
 
     def _allow_event(self, event: AstrMessageEvent) -> bool:
         message_obj = getattr(event, "message_obj", None)
