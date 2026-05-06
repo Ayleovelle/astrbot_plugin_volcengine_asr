@@ -95,6 +95,22 @@ class _FakeProviderRequest:
                 ],
             }
         ]
+        self.cached_content = [{"type": "record", "data": {"file": "cached-content.amr"}}]
+        self.cached_messages = [{"type": "record", "data": {"file": "cached-messages.amr"}}]
+        self.history = [{"type": "record", "data": {"file": "history.amr"}}]
+
+    def model_dump_for_context(self):
+        return {"prompt": self.prompt}
+
+
+class _ContextOnlyProviderRequest:
+    def __init__(self):
+        self.audio_urls = ["context-only.amr"]
+        self.files = ["context-only.amr"]
+        self.messages = [{"role": "user", "content": [{"type": "record", "data": {"file": "hidden.amr"}}]}]
+
+    def model_dump_for_context(self):
+        return {"messages": self.messages}
 
 
 class _FakeRunContext:
@@ -107,6 +123,9 @@ class _FakeRunContext:
         self.stage_data = {
             "payload": {"message": [{"type": "record", "data": {"file": "stage-data.amr"}}]}
         }
+        self.cache = {"provider_request": _FakeProviderRequest(prompt="cache-provider.amr")}
+        self.cached_content = [{"type": "record", "data": {"file": "object-cached.amr"}}]
+        self.cached_messages = [{"type": "record", "data": {"file": "object-cached-messages.amr"}}]
 
 
 class _NonIterableMessageChain:
@@ -529,8 +548,118 @@ def test_agent_begin_cleanup_sanitizes_run_context_caches():
     assert run_context.provider_request.audio_urls == []
     assert run_context.provider_request.files == []
     assert run_context.provider_request.prompt == "hello[voice prompt]"
+    assert run_context.provider_request.cached_content == []
+    assert run_context.provider_request.cached_messages == []
+    assert run_context.provider_request.history == []
     assert run_context.messages == [{"role": "user", "content": []}]
     assert run_context.stage_data["payload"]["message"][0].text == "hello"
+    assert isinstance(run_context.cache["provider_request"], _FakeProviderRequest)
+    assert run_context.cache["provider_request"].audio_urls == []
+    assert run_context.cache["provider_request"].prompt == "hello[voice prompt]"
+    assert run_context.cached_content == []
+    assert run_context.cached_messages == []
+
+
+def test_agent_begin_cleanup_sanitizes_provider_request_alias_extras_without_replacing_objects():
+    event = _FakeEvent()
+    event.message = []
+    event.message_chain = []
+    event.raw_message = []
+    event.message_obj.message = []
+    event.message_obj.message_chain = []
+    event.message_obj.raw_message = []
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "hello")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "hello[voice prompt]")
+    request = _FakeProviderRequest(prompt="request.amr")
+    req = _FakeProviderRequest(prompt="req.amr")
+    llm_request = _FakeProviderRequest(prompt="llm-request.amr")
+    event.extras["request"] = request
+    event.extras["req"] = req
+    event.message_obj.extras["llm_request"] = llm_request
+
+    _ensure_clean_voice_event_for_agent(event)
+
+    assert event.extras["request"] is request
+    assert event.extras["req"] is req
+    assert event.message_obj.extras["llm_request"] is llm_request
+    for provider_request in (request, req, llm_request):
+        assert provider_request.model_dump_for_context() == {"prompt": "hello[voice prompt]"}
+        assert provider_request.audio_urls == []
+        assert provider_request.files == []
+        assert provider_request.messages == [{"role": "user", "content": [{"type": "text", "text": "old message"}]}]
+        assert provider_request.cached_content == []
+        assert provider_request.cached_messages == []
+        assert provider_request.history == []
+
+
+def test_agent_begin_cleanup_sanitizes_mapping_run_context_without_replacing_provider_request():
+    event = _FakeEvent()
+    event.message = []
+    event.message_chain = []
+    event.raw_message = []
+    event.message_obj.message = []
+    event.message_obj.message_chain = []
+    event.message_obj.raw_message = []
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "hello")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "hello[voice prompt]")
+    provider_request = _FakeProviderRequest(prompt="mapping-request.amr")
+    run_context = {
+        "provider_request": provider_request,
+        "messages": [{"role": "user", "content": [{"type": "record", "data": {"file": "mapping-message.amr"}}]}],
+        "stage_data": {"payload": {"message": [{"type": "record", "data": {"file": "mapping-stage.amr"}}]}},
+        "url": "https://example.com/page.html",
+    }
+
+    _ensure_clean_voice_event_for_agent(event, run_context)
+
+    assert run_context["provider_request"] is provider_request
+    assert provider_request.model_dump_for_context() == {"prompt": "hello[voice prompt]"}
+    assert provider_request.audio_urls == []
+    assert provider_request.files == []
+    assert run_context["messages"] == [{"role": "user", "content": []}]
+    assert run_context["stage_data"]["payload"]["message"][0].text == "hello"
+    assert run_context["url"] == "https://example.com/page.html"
+
+
+def test_agent_begin_cleanup_preserves_plain_mapping_values():
+    event = _FakeEvent()
+    event.message = []
+    event.message_chain = []
+    event.raw_message = []
+    event.message_obj.message = []
+    event.message_obj.message_chain = []
+    event.message_obj.raw_message = []
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "hello")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "hello[voice prompt]")
+    event.extras["plain_state"] = {"url": "https://example.com/page.html", "files": ["report.txt"]}
+    event.message_obj.extras["plain_cache"] = {"path": "/tmp/report.txt", "note": "keep me"}
+
+    _ensure_clean_voice_event_for_agent(event)
+
+    assert event.extras["plain_state"] == {"url": "https://example.com/page.html", "files": ["report.txt"]}
+    assert event.message_obj.extras["plain_cache"] == {"path": "/tmp/report.txt", "note": "keep me"}
+
+
+def test_agent_begin_cleanup_preserves_context_only_provider_request_objects():
+    event = _FakeEvent()
+    event.message = []
+    event.message_chain = []
+    event.raw_message = []
+    event.message_obj.message = []
+    event.message_obj.message_chain = []
+    event.message_obj.raw_message = []
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "hello")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "hello[voice prompt]")
+    request = _ContextOnlyProviderRequest()
+    run_context = {"request": request}
+
+    _ensure_clean_voice_event_for_agent(event, run_context)
+
+    assert run_context["request"] is request
+    assert request.audio_urls == []
+    assert request.files == []
+    assert request.messages == [{"role": "user", "content": []}]
+    assert request.model_dump_for_context() == {"messages": request.messages}
 
 
 def test_on_message_success_cleans_extra_cache_shapes_before_agent_stage():

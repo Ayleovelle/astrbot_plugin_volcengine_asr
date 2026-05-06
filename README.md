@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.1.10-brightgreen.svg" alt="Version 2.1.10">
+  <img src="https://img.shields.io/badge/Version-2.1.11-brightgreen.svg" alt="Version 2.1.11">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License MIT">
@@ -126,13 +126,22 @@ VoiceInput -> AudioPayloadResult -> ASR -> VoiceInjectionPlan -> ProviderRequest
 - 识别失败、配置错误、未听清直接提示、`reply_transcription=true` 直接回复转写等不需要默认 LLM 继续处理原语音的路径，会先 `stop_event()`，再发送回复。
 - 这样可以避免后续 agent 或媒体转换逻辑继续读取裸 `.amr` 文件名，减少 `not a valid file: xxx.amr`。
 
+## 2.1.11 ProviderRequest 活对象保护修复
+
+`2.1.11` 继续修复 AstrBot v4.24.2 的 `agent request` 阶段缓存残留。真实环境里，如果旧 `.amr` 残留藏在 `event.extras["request"]`、`event.extras["req"]`、`message_obj.extras["llm_request"]` 或 mapping 形态的 `run_context` 中，旧版本可能继续触发 `not a valid file: xxx.amr`。进一步加固时，如果把 AstrBot 的 `ProviderRequest` 活对象替换成普通 `dict`，又会触发 `'dict' object has no attribute 'model_dump_for_context'`。
+
+- `request`、`req`、`llm_request` 等 ProviderRequest 别名现在会原地清理内部音频字段，不再被跳过。
+- 带 `model_dump_for_context()` 的 AstrBot 请求对象会被识别为 ProviderRequest-like 并保留对象身份，不会再被序列化成 `dict` 写回缓存。
+- `run_context` 支持 dict/mapping 形态清理，并扩展 `cached_content`、`cached_messages`、`history`、`input_messages`、`conversation`、`session` 等缓存字段。
+- 普通 URL、普通 `files/path` 和普通 extras 会继续保留；只有确认含音频引用、`Record` 或 `.amr/.silk` 等音频痕迹时才净化。
+
 ## 2.1.10 发布通道重发说明
 
 `2.1.10` 的运行时代码沿用 `2.1.9` 的 agent 前未知缓存与 `run_context` 清理加固。由于 GitHub 对已创建的 `v2.1.9` Release 触发 immutable release 限制，无法再为该 Release 补上传插件 zip 附件，所以正式可下载版本改为 `v2.1.10`。
 
-- 安装时请下载 `v2.1.10` Release 附件 `astrbot_plugin_volcengine_asr.zip`。
+- `v2.1.10` 已被 `v2.1.11` 取代；新安装和升级请使用最新 Release 附件。
 - 不要安装 GitHub 自动生成的 Source code zip。
-- `v2.1.9` tag 仅保留为历史提交点，实际安装请使用 `v2.1.10`。
+- `v2.1.9` tag 仅保留为历史提交点，实际安装请使用最新 Release。
 
 ## 2.1.9 agent 前未知缓存与 run_context 清理加固
 
@@ -1081,7 +1090,7 @@ python3 scripts/build_release_zip.py
 
 ## 版本说明
 
-当前版本：`2.1.10`
+当前版本：`2.1.11`
 
 本版本重点：
 

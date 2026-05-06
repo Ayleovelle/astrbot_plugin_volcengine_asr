@@ -50,11 +50,59 @@ VOLC_FLASH_ENDPOINT = (
 VOLC_RESOURCE_ID = "volc.bigasr.auc_turbo"
 VOLC_SUCCESS_CODE = "20000000"
 VOLC_SILENT_AUDIO_CODE = "20000003"
-PLUGIN_VERSION = "2.1.10"
+PLUGIN_VERSION = "2.1.11"
 PLUGIN_REPO_URL = "https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr"
 SUPPORTED_AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".opus"}
 TRANSCODE_HINT_EXTS = {".amr", ".silk", ".slk", ".m4a", ".aac", ".flac", ".webm"}
 FFMPEG_PROBE_TIMEOUT_SECONDS = 5
+PROVIDER_REQUEST_CACHE_KEYS = {"provider_request", "request", "req", "llm_request"}
+AUDIO_REFERENCE_KEYS = {
+    "audio",
+    "audio_url",
+    "audio_urls",
+    "audios",
+    "file",
+    "file_url",
+    "file_urls",
+    "files",
+    "path",
+    "record",
+    "records",
+    "url",
+    "urls",
+}
+CACHE_CONTENT_ATTRS = (
+    "attachments",
+    "audios",
+    "cache",
+    "cache_content",
+    "cached_content",
+    "cached_messages",
+    "content",
+    "context",
+    "contexts",
+    "conversation",
+    "data",
+    "extra_user_content_parts",
+    "files",
+    "history",
+    "input",
+    "input_messages",
+    "media",
+    "message",
+    "message_chain",
+    "messages",
+    "metadata",
+    "original_message",
+    "payload",
+    "raw_content",
+    "raw_message",
+    "request",
+    "segments",
+    "session",
+    "stage_data",
+    "tools",
+)
 DEFAULT_VOICE_PROMPT_TEMPLATE = (
     "<text>[符号前面的内容是用户的语音转文字内容，请通过上述内容判断用户情绪，"
     "并且尽量使用语音回复，严禁讨论本插件的实际功能“转文字”的事实，回复时不要考虑括号内内容]"
@@ -711,7 +759,7 @@ def _object_to_sanitizable_dict(value: Any) -> dict[str, Any] | None:
         return None
 
     dumped = None
-    for method_name in ("model_dump_for_context", "model_dump", "dict"):
+    for method_name in ("model_dump", "dict"):
         method = getattr(value, method_name, None)
         if callable(method):
             try:
@@ -741,11 +789,12 @@ def _object_to_sanitizable_dict(value: Any) -> dict[str, Any] | None:
     return data or None
 
 
-def _sanitize_content_value(value: Any, fallback_text: str) -> Any:
+def _sanitize_content_value(value: Any, fallback_text: str, llm_text: str | None = None) -> Any:
+    request_text = llm_text if isinstance(llm_text, str) and llm_text.strip() else fallback_text
     if isinstance(value, list):
         cleaned = []
         for item in value:
-            item_cleaned = _sanitize_content_value(item, fallback_text)
+            item_cleaned = _sanitize_content_value(item, fallback_text, request_text)
             if item_cleaned is not None:
                 cleaned.append(item_cleaned)
         return cleaned
@@ -760,19 +809,8 @@ def _sanitize_content_value(value: Any, fallback_text: str) -> Any:
         cleaned: dict[Any, Any] = {}
         for key, item in value.items():
             key_text = str(key).lower()
-            if key_text in {
-                "audio",
-                "audio_url",
-                "audio_urls",
-                "audios",
-                "file",
-                "file_url",
-                "file_urls",
-                "files",
-                "path",
-                "record",
-                "records",
-            } and _looks_like_audio_reference(item):
+            if key_text in AUDIO_REFERENCE_KEYS and _contains_sanitizable_voice_reference(item):
+                cleaned[key] = []
                 continue
             if key_text in {
                 "message",
@@ -781,7 +819,7 @@ def _sanitize_content_value(value: Any, fallback_text: str) -> Any:
             }:
                 cleaned[key] = fallback_text if key_text == "raw_message" else _plain_message_chain(fallback_text)
                 continue
-            item_cleaned = _sanitize_content_value(item, fallback_text)
+            item_cleaned = _sanitize_content_value(item, fallback_text, request_text)
             if item_cleaned is not None:
                 cleaned[key] = item_cleaned
         if cleaned.get("type") == "text" and not str(cleaned.get("text", "")).strip():
@@ -792,20 +830,24 @@ def _sanitize_content_value(value: Any, fallback_text: str) -> Any:
 
     if _is_record_component(value):
         return None
+    if _looks_like_provider_request(value):
+        _sanitize_provider_request(value, fallback_text, request_text)
+        return value
     object_dict = _object_to_sanitizable_dict(value)
     if object_dict is not None:
-        return _sanitize_content_value(object_dict, fallback_text)
+        return _sanitize_content_value(object_dict, fallback_text, request_text)
     if _looks_like_audio_reference(value):
         return None
     return value
 
 
-def _sanitize_content_parts(parts: Any, fallback_text: str) -> list[Any]:
+def _sanitize_content_parts(parts: Any, fallback_text: str, llm_text: str | None = None) -> list[Any]:
     if not isinstance(parts, list):
         return []
+    request_text = llm_text if isinstance(llm_text, str) and llm_text.strip() else fallback_text
     cleaned = []
     for part in parts:
-        sanitized = _sanitize_content_value(part, fallback_text)
+        sanitized = _sanitize_content_value(part, fallback_text, request_text)
         if sanitized is not None:
             cleaned.append(sanitized)
     return cleaned
@@ -826,20 +868,11 @@ def _contains_sanitizable_voice_reference(value: Any, depth: int = 0) -> bool:
             return True
         for key, item in value.items():
             key_text = str(key).lower()
-            if key_text in {
-                "audio",
-                "audio_url",
-                "audio_urls",
-                "audios",
-                "file",
-                "file_url",
-                "file_urls",
-                "files",
-                "path",
-                "record",
-                "records",
-                "url",
-            } and (_looks_like_audio_reference(item) or _is_record_component(item)):
+            if key_text in PROVIDER_REQUEST_CACHE_KEYS and _looks_like_provider_request(item):
+                return True
+            if _looks_like_provider_request(item):
+                return True
+            if key_text in AUDIO_REFERENCE_KEYS and _contains_sanitizable_voice_reference(item, depth + 1):
                 return True
             if _contains_sanitizable_voice_reference(item, depth + 1):
                 return True
@@ -854,27 +887,14 @@ def _sanitize_provider_request(req: ProviderRequest, memory_text: str, llm_text:
     if hasattr(req, "audio_urls"):
         req.audio_urls = []
 
-    for attr in (
-        "attachments",
-        "audios",
-        "content",
-        "contexts",
-        "extra_user_content_parts",
-        "files",
-        "file_urls",
-        "input",
-        "media",
-        "metadata",
-        "message",
-        "messages",
-        "raw_content",
-        "tools",
-    ):
+    for attr in CACHE_CONTENT_ATTRS:
         value = getattr(req, attr, None)
         if isinstance(value, list):
-            setattr(req, attr, _sanitize_content_parts(value, memory_text))
+            setattr(req, attr, _sanitize_content_parts(value, memory_text, llm_text))
         elif isinstance(value, dict):
-            setattr(req, attr, _sanitize_content_value(value, memory_text))
+            setattr(req, attr, _sanitize_content_value(value, memory_text, llm_text))
+        elif _contains_sanitizable_voice_reference(value):
+            setattr(req, attr, _sanitize_content_value(value, memory_text, llm_text))
         elif _looks_like_audio_reference(value) or _is_record_component(value):
             setattr(req, attr, None)
 
@@ -883,16 +903,42 @@ def _sanitize_provider_request(req: ProviderRequest, memory_text: str, llm_text:
         req.prompt = llm_text
 
 
-def _set_sanitized_attr(owner: Any, attr: str, fallback_text: str) -> None:
+def _sanitize_mapping_cache(mapping: dict[Any, Any], memory_text: str, llm_text: str) -> None:
+    for key in list(mapping):
+        key_text = str(key).lower()
+        value = mapping[key]
+        if key_text.startswith("volcengine_asr_"):
+            continue
+        if key_text in PROVIDER_REQUEST_CACHE_KEYS and _looks_like_provider_request(value):
+            _sanitize_provider_request(value, memory_text, llm_text)
+            continue
+        if _looks_like_provider_request(value):
+            _sanitize_provider_request(value, memory_text, llm_text)
+            continue
+        if key_text in AUDIO_REFERENCE_KEYS and _contains_sanitizable_voice_reference(value):
+            mapping[key] = []
+            continue
+        if not _contains_sanitizable_voice_reference(value):
+            continue
+        mapping[key] = _sanitize_content_value(value, memory_text, llm_text)
+
+
+def _set_sanitized_attr(owner: Any, attr: str, fallback_text: str, llm_text: str | None = None) -> None:
+    request_text = llm_text if isinstance(llm_text, str) and llm_text.strip() else fallback_text
     try:
         value = getattr(owner, attr)
     except Exception:
         return
     if _is_event_like(value) or _looks_like_provider_request(value):
+        if _looks_like_provider_request(value):
+            _sanitize_provider_request(value, fallback_text, request_text)
+        return
+    if isinstance(value, dict):
+        _sanitize_mapping_cache(value, fallback_text, request_text)
         return
     if not _contains_sanitizable_voice_reference(value):
         return
-    sanitized = _sanitize_content_value(value, fallback_text)
+    sanitized = _sanitize_content_value(value, fallback_text, request_text)
     try:
         setattr(owner, attr, sanitized)
     except Exception:
@@ -903,39 +949,17 @@ def _is_event_like(value: Any) -> bool:
     return value is not None and hasattr(value, "get_extra") and hasattr(value, "set_extra")
 
 
-def _sanitize_visible_object_caches(owner: Any, fallback_text: str) -> None:
+def _sanitize_visible_object_caches(owner: Any, fallback_text: str, llm_text: str | None = None) -> None:
+    request_text = llm_text if isinstance(llm_text, str) and llm_text.strip() else fallback_text
     if owner is None or isinstance(owner, (str, bytes, bytearray, dict, list)) or _is_event_like(owner):
         return
-    for attr in (
-        "attachments",
-        "audios",
-        "cache",
-        "content",
-        "context",
-        "contexts",
-        "data",
-        "extra_user_content_parts",
-        "files",
-        "input",
-        "media",
-        "message",
-        "message_chain",
-        "messages",
-        "metadata",
-        "original_message",
-        "payload",
-        "raw_content",
-        "raw_message",
-        "request",
-        "segments",
-        "stage_data",
-        "tools",
-    ):
+    for attr in CACHE_CONTENT_ATTRS:
         if hasattr(owner, attr):
-            _set_sanitized_attr(owner, attr, fallback_text)
+            _set_sanitized_attr(owner, attr, fallback_text, request_text)
 
 
-def _sanitize_event_cached_content(event: AstrMessageEvent, text: str) -> None:
+def _sanitize_event_cached_content(event: AstrMessageEvent, text: str, llm_text: str | None = None) -> None:
+    request_text = llm_text if isinstance(llm_text, str) and llm_text.strip() else text
     containers = []
     seen_containers: set[int] = set()
     for owner in (event, getattr(event, "message_obj", None)):
@@ -948,26 +972,16 @@ def _sanitize_event_cached_content(event: AstrMessageEvent, text: str) -> None:
                 containers.append(container)
 
     for container in containers:
-        for key in list(container):
-            key_text = str(key).lower()
-            if key_text.startswith("volcengine_asr_"):
-                continue
-            if key_text in {"audio", "audio_url", "audio_urls", "audios", "file", "files", "record", "records"}:
-                container[key] = []
-                continue
-            if key_text in {"provider_request", "request", "req", "llm_request"} and _looks_like_provider_request(
-                container[key]
-            ):
-                continue
-            if not _contains_sanitizable_voice_reference(container[key]):
-                continue
-            container[key] = _sanitize_content_value(container[key], text)
+        _sanitize_mapping_cache(container, text, request_text)
 
 
 def _sanitize_run_context_cached_content(run_context: Any, memory_text: str, llm_text: str) -> None:
     if run_context is None:
         return
-    _sanitize_visible_object_caches(run_context, memory_text)
+    if isinstance(run_context, dict):
+        _sanitize_mapping_cache(run_context, memory_text, llm_text)
+        return
+    _sanitize_visible_object_caches(run_context, memory_text, llm_text)
     if _looks_like_provider_request(run_context):
         _sanitize_provider_request(run_context, memory_text, llm_text)
     for attr in ("provider_request", "request", "req", "llm_request"):
@@ -977,8 +991,10 @@ def _sanitize_run_context_cached_content(run_context: Any, memory_text: str, llm
             continue
         if _looks_like_provider_request(value):
             _sanitize_provider_request(value, memory_text, llm_text)
+        elif isinstance(value, dict):
+            _sanitize_mapping_cache(value, memory_text, llm_text)
         elif value is not run_context:
-            _sanitize_visible_object_caches(value, memory_text)
+            _sanitize_visible_object_caches(value, memory_text, llm_text)
 
 
 def _set_event_extras(event: AstrMessageEvent, extras: dict[str, Any]) -> None:
@@ -1000,7 +1016,7 @@ def _ensure_clean_voice_event_for_agent(event: AstrMessageEvent, run_context: An
     memory_text = memory_text.strip()
     llm_text = llm_text.strip() if isinstance(llm_text, str) and llm_text.strip() else memory_text
     _replace_event_message_with_plain_text(event, memory_text)
-    _sanitize_event_cached_content(event, memory_text)
+    _sanitize_event_cached_content(event, memory_text, llm_text)
     req = event.get_extra("provider_request", None)
     if _looks_like_provider_request(req):
         _sanitize_provider_request(req, memory_text, llm_text)
@@ -1021,7 +1037,17 @@ def _build_clean_provider_request(prompt: str) -> Any | None:
 
 
 def _looks_like_provider_request(value: Any) -> bool:
-    return value is not None and hasattr(value, "prompt")
+    if value is None or isinstance(value, (dict, list, str, bytes, bytearray)):
+        return False
+    if hasattr(value, "prompt"):
+        return True
+    if callable(getattr(value, "model_dump_for_context", None)):
+        return True
+    class_name = value.__class__.__name__.lower()
+    module_name = getattr(value.__class__, "__module__", "").lower()
+    if "providerrequest" in class_name or ("provider" in module_name and "request" in class_name):
+        return True
+    return False
 
 
 def _disable_default_llm_reentry(event: AstrMessageEvent) -> None:

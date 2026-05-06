@@ -1,5 +1,16 @@
 # 更新说明
 
+## v2.1.11 - 修复 ProviderRequest 活对象保护与 agent request 缓存清理
+
+### 主要变更
+
+- 修复 `agent request` 阶段可能从 `not a valid file: xxx.amr` 进一步变成 `'dict' object has no attribute 'model_dump_for_context'` 的问题。
+- `event.extras` / `message_obj.extras` 中的 `request`、`req`、`llm_request` 等 `ProviderRequest` 别名现在会被原地净化，不再被跳过，也不会被替换成普通 `dict`。
+- `_looks_like_provider_request()` 现在会保护带 `model_dump_for_context()` 的 AstrBot 请求对象，避免清理逻辑调用该接口后把活对象序列化并写回缓存。
+- `run_context` 支持 mapping 形态清理，并扩展 `cached_content`、`cached_messages`、`history`、`input_messages`、`conversation`、`session` 等缓存字段。
+- 清理逻辑继续保留普通 URL、普通 `files/path` 和普通 extras；只有确认含音频引用、`Record` 或 `.amr/.silk` 等音频痕迹时才净化。
+- 新增回归测试覆盖 ProviderRequest 别名、mapping `run_context`、无 `prompt` 但带 `model_dump_for_context()` 的请求对象、普通 URL 不误删。
+
 ## v2.1.10 - 重发 v2.1.9 修复并规避 immutable release 锁
 
 ### 主要变更
