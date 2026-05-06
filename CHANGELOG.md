@@ -1,5 +1,24 @@
 # 更新说明
 
+## v2.0.1 - 代码与工作流程优化
+
+### 主要变更
+
+- 优化了代码以及工作流程。
+- 拆分语音识别批处理逻辑，降低消息处理主流程复杂度。
+- 复用 HTTP 客户端下载语音文件，并在下载前优先检查 `Content-Length`，减少超大音频的无效传输。
+- 统一识别结果模板字段构造，降低回复文本和 LLM 注入文本字段不一致的风险。
+- 为未来 Web UI 预留稳定接口：`get_webui_state()`、`get_webui_config_schema()`、`get_webui_config_snapshot()`、`update_webui_config()`。
+- `update_webui_config()` 增加字段白名单、类型转换、选项校验、整数范围校验、密钥掩码跳过和运行时配置重载，避免 Web UI 保存时覆盖真实密钥。
+- `get_webui_state()` 补充鉴权模式、校验错误、接口地址、资源 ID、超时、转码参数和识别参数，未来 Web UI 状态页可以直接复用。
+- 优化事件 extra 写入路径，便于后续 Web UI 和排障流程复用状态数据。
+- 新增可追踪的 Release zip 构建脚本 `scripts/build_release_zip.py`，生成 `output/astrbot_plugin_volcengine_asr.zip` 并保留内置 `ffmpeg` 可执行权限。
+- 确认 `fuck-u-code` 分数由 GitHub Actions bot 接管，自动分析、更新两份 `FuckUCodeScore.svg`，人工不再直接改分数。
+- 修复部分 AstrBot 仓库安装方式下根目录入口找不到 `astrbot_plugin_volcengine_asr` 包的问题。
+- 修正安装说明，明确从链接安装必须使用完整 `https://github.com/...` 地址，不能省略 `https:`。
+- 同步包内 `requirements.txt`，让仓库安装模式也能安装 `imageio-ffmpeg` 作为 ffmpeg 兜底。
+- 扩展 helper 测试，覆盖 Web UI 预留接口、注入事件标记和识别结果模板字段。
+
 ## v2.0.0 - 情绪判断 LLM
 
 ### 主要变更

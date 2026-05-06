@@ -1,5 +1,12 @@
 from astrbot_plugin_volcengine_asr.main import (
+    ASR_EXTRA_INJECTED,
+    ASR_EXTRA_LLM_TEXT,
+    ASR_EXTRA_MEMORY_TEXT,
+    ASR_EXTRA_TEXT,
+    ASR_EXTRA_UNCLEAR,
+    AsrResult,
     EmotionJudgement,
+    VolcengineAsrPlugin,
     _append_emotion_guidance,
     _build_emotion_judgement,
     _build_emotion_prompt,
@@ -14,6 +21,19 @@ from astrbot_plugin_volcengine_asr.main import (
     _safe_parse_json_object,
 )
 from scripts.update_fuck_u_code_score import build_svg, extract_score, find_score, normalize_score
+
+
+class _FakeEvent:
+    def __init__(self):
+        self.extras = {}
+        self.message_str = ""
+        self.message_obj = type("MessageObj", (), {"message_str": "", "message": []})()
+
+    def set_extra(self, key, value):
+        self.extras[key] = value
+
+    def get_extra(self, key, default=None):
+        return self.extras.get(key, default)
 
 
 def test_render_prompt_template_supports_angle_placeholder_with_braces_text():
@@ -178,6 +198,122 @@ def test_append_emotion_guidance_only_changes_llm_text():
     assert "情绪判断辅助信息" in result
     assert "建议参考权重：0.40" in result
     assert _append_emotion_guidance("原始 LLM 文本", None) == "原始 LLM 文本"
+
+
+def test_build_result_values_reuses_transcription_formatting():
+    plugin = VolcengineAsrPlugin(None, {"api_key": "token"})
+    results = [
+        AsrResult(text="你好", request_id="req-1", logid="log-1", duration_ms=100),
+        AsrResult(text="世界", request_id="req-2", logid="", duration_ms=200),
+    ]
+
+    values = plugin._build_result_values(results)
+
+    assert values["text"] == "1. 你好\n2. 世界"
+    assert values["logid"] == "log-1"
+    assert values["request_id"] == "req-1,req-2"
+    assert values["duration_ms"] == ""
+
+
+def test_inject_user_text_sets_clean_message_and_asr_extras():
+    event = _FakeEvent()
+
+    VolcengineAsrPlugin._inject_user_text(
+        event,
+        memory_text="干净文本",
+        llm_text="LLM 文本",
+        raw_text="原始文本",
+        unclear=True,
+    )
+
+    assert event.message_str == "干净文本"
+    assert event.message_obj.message_str == "干净文本"
+    assert event.message_obj.message[0].text == "干净文本"
+    assert event.extras[ASR_EXTRA_TEXT] == "原始文本"
+    assert event.extras[ASR_EXTRA_MEMORY_TEXT] == "干净文本"
+    assert event.extras[ASR_EXTRA_LLM_TEXT] == "LLM 文本"
+    assert event.extras[ASR_EXTRA_INJECTED] is True
+    assert event.extras[ASR_EXTRA_UNCLEAR] is True
+
+
+def test_webui_snapshot_exposes_stable_state_schema_and_config_values():
+    plugin = VolcengineAsrPlugin(
+        None,
+        {
+            "api_key": "token",
+            "submit_mode": "base64",
+            "enable_emotion_analysis": True,
+            "emotion_model_id": "emotion-provider",
+            "emotion_max_respect_weight_percent": 40,
+        },
+    )
+
+    state = plugin.get_webui_state()
+    schema = plugin.get_webui_config_schema()
+    snapshot = plugin.get_webui_config_snapshot()
+
+    assert state["auth_configured"] is True
+    assert state["schema_version"] == 1
+    assert state["submit_mode"] == "base64"
+    assert state["emotion"]["enabled"] is True
+    assert state["emotion"]["model_id"] == "emotion-provider"
+    assert state["emotion"]["max_respect_weight_percent"] == 40
+    assert "api_key" in schema
+    assert snapshot["api_key"] == "****"
+    assert "access_key" in snapshot
+
+
+def test_webui_update_skips_unchanged_masked_secret_and_reloads_runtime_values():
+    plugin = VolcengineAsrPlugin(
+        None,
+        {
+            "api_key": "abcd1234wxyz",
+            "submit_mode": "base64",
+            "max_audio_mb": 20,
+            "enable_emotion_analysis": False,
+        },
+    )
+    snapshot = plugin.get_webui_config_snapshot()
+
+    result = plugin.update_webui_config(
+        {
+            "api_key": snapshot["api_key"],
+            "submit_mode": "URL",
+            "max_audio_mb": "12",
+            "enable_emotion_analysis": "true",
+        }
+    )
+
+    assert result["errors"] == {}
+    assert result["skipped"]["api_key"] == "密钥未变更"
+    assert "api_key" not in result["applied"]
+    assert plugin.config["api_key"] == "abcd1234wxyz"
+    assert plugin.submit_mode == "url"
+    assert plugin.max_audio_bytes == 12 * 1024 * 1024
+    assert plugin.enable_emotion_analysis is True
+    assert plugin.get_webui_state()["max_audio_mb"] == 12
+
+
+def test_webui_update_validates_type_options_and_ranges():
+    plugin = VolcengineAsrPlugin(None, {"api_key": "token"})
+
+    result = plugin.update_webui_config(
+        {
+            "submit_mode": "bad",
+            "max_audio_mb": "abc",
+            "enable_group": 1,
+            "emotion_max_respect_weight_percent": 101,
+            "unknown_key": "value",
+        }
+    )
+
+    assert "submit_mode" in result["errors"]
+    assert "max_audio_mb" in result["errors"]
+    assert "enable_group" in result["errors"]
+    assert "emotion_max_respect_weight_percent" in result["errors"]
+    assert result["skipped"]["unknown_key"] == "未知配置项"
+    assert result["applied"] == {}
+    assert plugin.submit_mode == "base64"
 
 
 def test_extract_fuck_u_code_score_from_report_text():

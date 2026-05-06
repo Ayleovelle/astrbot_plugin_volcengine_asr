@@ -56,9 +56,14 @@ event.filter = _Filter()
 provider = types.ModuleType("astrbot.api.provider")
 provider.ProviderRequest = object
 
+class _Star:
+    def __init__(self, context=None):
+        self.context = context
+
+
 star = types.ModuleType("astrbot.api.star")
 star.Context = object
-star.Star = object
+star.Star = _Star
 
 core_star = types.ModuleType("astrbot.core.star.star")
 core_star.StarMetadata = type("StarMetadata", (), {})

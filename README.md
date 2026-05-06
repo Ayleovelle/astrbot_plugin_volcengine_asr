@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.0.0-brightgreen.svg" alt="Version 2.0.0">
+  <img src="https://img.shields.io/badge/Version-2.0.1-brightgreen.svg" alt="Version 2.0.1">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License MIT">
@@ -181,6 +181,20 @@ AstrBot 可能会报找不到 `metadata.yaml`。这种情况通常说明你下�
 ```text
 https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr
 ```
+
+如果 WebUI 输入框会自动补全 `.git`，也可以使用：
+
+```text
+https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr.git
+```
+
+不要省略协议头。也就是说，不要填写下面这种地址：
+
+```text
+//github.com/Ayleovelle/astrbot_plugin_volcengine_asr.git
+```
+
+少了 `https:` 会让 AstrBot 把它当成不完整链接处理，可能导致下载、依赖安装或插件加载路径异常。
 
 仓库根目录提供了 `metadata.yaml`、`main.py`、`_conf_schema.json` 和 `requirements.txt`，可以被 AstrBot 直接识别。
 
@@ -842,7 +856,7 @@ notify_asr_error = true
 发布前建议至少确认：
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile main.py astrbot_plugin_volcengine_asr/main.py
+PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile main.py astrbot_plugin_volcengine_asr/main.py scripts/update_fuck_u_code_score.py scripts/build_release_zip.py
 ```
 
 ```bash
@@ -855,19 +869,55 @@ PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q -p no:cache
 
 如果本地没有 `pytest`，至少应确保纯函数 helper 的测试逻辑能运行，配置 JSON 能解析，Release zip 根目录结构正确。
 
+构建 Release zip：
+
+```bash
+python3 scripts/build_release_zip.py
+```
+
+发布时只上传 `output/astrbot_plugin_volcengine_asr.zip`。根目录旧 zip、`_release_body.json`、`_release_draft.json` 都不是 2.0.1 的发布依据。
+
+## Web UI 接口预留
+
+2.0.1 先不把完整 Web UI 合进 `main`，但已经为后续独立 Web UI 分支预留稳定后端接口。未来插件配置页、状态页、情绪计算可视化，都应优先调用这些方法，而不是直接读取插件内部属性。
+
+| 接口 | 用途 |
+| :--- | :--- |
+| `get_webui_state()` | 返回运行状态快照，包括鉴权模式、接口地址、提交模式、转码参数、情绪判断状态、LivingMemory 兼容状态。 |
+| `get_webui_config_schema()` | 返回 `_conf_schema.json`，供 Web UI 渲染配置表单。 |
+| `get_webui_config_snapshot()` | 返回当前配置值，并对 `api_key`、`access_key` 做掩码，避免前端直接暴露密钥。 |
+| `update_webui_config(updates)` | 预留给 Web UI 保存配置；会执行字段白名单、类型转换、选项校验、范围校验、密钥掩码跳过和运行时重载。 |
+
+`update_webui_config()` 返回结构：
+
+```json
+{
+  "applied": {
+    "submit_mode": "base64"
+  },
+  "skipped": {
+    "api_key": "密钥未变更"
+  },
+  "errors": {}
+}
+```
+
+密钥字段有一个专门保护：如果 Web UI 把 `get_webui_config_snapshot()` 中的掩码值原样传回，插件会认为密钥未变更，不会把真实密钥覆盖成 `****` 或 `abcd...wxyz`。后续开发配置型 Web UI 时必须保留这个语义。
+
 ## 版本说明
 
-当前版本：`2.0.0`
+当前版本：`2.0.1`
 
 本版本重点：
 
-- 根目录入口轻量化，减少双份主逻辑维护成本。
-- 修复语音转写内容包含 `{}` 时的提示词模板渲染边界问题。
-- 保持 LivingMemory 两阶段注入语义。
-- 明确 Release zip、仓库安装、源码 zip 的区别。
-- 补齐 `ffmpeg` 查找顺序和配置项说明。
-- 增加基础 helper 测试。
-- 更新 README 视觉资源和项目展示。
+- 修复部分 AstrBot 仓库安装模式下根目录入口找不到插件包的问题。
+- 修正 WebUI 链接安装说明，明确必须使用完整 `https://github.com/...` 地址。
+- 优化语音识别批处理、下载、大小检查和结果模板字段复用。
+- 为未来 Web UI 预留可读、可写、可校验的配置接口。
+- `fuck-u-code` 分数由 GitHub Actions bot 自动分析和更新 SVG。
+- 保持 LivingMemory 两阶段注入语义，情绪判断结果不污染长期记忆文本。
+- 同步包内依赖，让仓库安装模式也能安装 `imageio-ffmpeg` 作为转码兜底。
+- 扩展 helper 测试，覆盖 Web UI 接口、事件注入标记和识别结果模板字段。
 
 完整更新记录见 [CHANGELOG.md](./CHANGELOG.md)。
 

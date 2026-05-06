@@ -98,6 +98,74 @@ ASR_EXTRA_UNCLEAR = "volcengine_asr_unclear"
 ASR_EXTRA_EMOTION_RESULT = "volcengine_asr_emotion_result"
 ASR_EXTRA_EMOTION_APPLIED = "volcengine_asr_emotion_applied"
 ASR_EXTRA_EMOTION_INTERNAL_CALL = "volcengine_asr_emotion_internal_call"
+WEBUI_CONFIG_SCHEMA_PATH = Path(__file__).resolve().with_name("_conf_schema.json")
+WEBUI_CONFIG_KEYS = (
+    "api_key",
+    "app_key",
+    "access_key",
+    "resource_id",
+    "endpoint",
+    "uid",
+    "submit_mode",
+    "max_audio_mb",
+    "timeout_seconds",
+    "enable_transcode",
+    "prefer_bundled_ffmpeg",
+    "ffmpeg_path",
+    "transcode_output_format",
+    "transcode_sample_rate",
+    "transcode_channels",
+    "auto_recognize",
+    "enable_private",
+    "enable_group",
+    "only_when_at_or_wake",
+    "ignore_self",
+    "inject_as_user_input",
+    "stop_event_after_recognition",
+    "send_empty_result_message",
+    "reply_transcription",
+    "reply_template",
+    "voice_prompt_template",
+    "inject_on_unclear_voice",
+    "unclear_voice_prompt",
+    "enable_emotion_analysis",
+    "emotion_model_id",
+    "emotion_context_turns",
+    "emotion_max_respect_weight_percent",
+    "emotion_timeout_seconds",
+    "emotion_fail_open",
+    "emotion_prompt_template",
+    "show_logid",
+    "notify_config_error",
+    "notify_asr_error",
+    "enable_itn",
+    "enable_punc",
+    "enable_ddc",
+    "enable_speaker_info",
+)
+WEBUI_SECRET_CONFIG_KEYS = {"api_key", "access_key"}
+WEBUI_CLIENT_CONFIG_KEYS = {
+    "api_key",
+    "app_key",
+    "access_key",
+    "resource_id",
+    "endpoint",
+    "uid",
+    "timeout_seconds",
+    "enable_itn",
+    "enable_punc",
+    "enable_ddc",
+    "enable_speaker_info",
+}
+WEBUI_INT_RANGES = {
+    "max_audio_mb": (1, 100),
+    "timeout_seconds": (5, 300),
+    "transcode_sample_rate": (8000, 48000),
+    "transcode_channels": (1, 2),
+    "emotion_context_turns": (0, 20),
+    "emotion_max_respect_weight_percent": (0, 100),
+    "emotion_timeout_seconds": (1, 120),
+}
 
 
 class UserVisibleError(Exception):
@@ -154,6 +222,13 @@ class AsrResult:
     logid: str = ""
     duration_ms: int | None = None
     raw: dict[str, Any] | None = None
+
+
+@dataclass(slots=True)
+class RecognitionBatch:
+    results: list[AsrResult]
+    errors: list[str]
+    unclear_count: int = 0
 
 
 def _config_str(config: AstrBotConfig, key: str, default: str = "") -> str:
@@ -245,6 +320,17 @@ def _estimate_base64_size(base64_text: str) -> int:
     return max(0, (len(cleaned) * 3 // 4) - padding)
 
 
+def _max_mb_text(max_bytes: int) -> int:
+    return max_bytes // 1024 // 1024
+
+
+def _safe_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _format_with_fallback(template: str, values: dict[str, Any]) -> str:
     try:
         return template.format(**values)
@@ -261,6 +347,76 @@ def _replace_first_text(text: str, old: str, new: str) -> tuple[str, bool]:
     if not old or old not in text:
         return text, False
     return text.replace(old, new, 1), True
+
+
+def _set_event_extras(event: AstrMessageEvent, extras: dict[str, Any]) -> None:
+    for key, value in extras.items():
+        event.set_extra(key, value)
+
+
+def _read_json_file(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning(f"读取 JSON 文件失败：{path}，error={exc}")
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _mask_secret(value: Any) -> str:
+    text = str(value or "")
+    if not text:
+        return ""
+    if len(text) <= 8:
+        return "****"
+    return f"{text[:4]}...{text[-4:]}"
+
+
+def _is_unchanged_masked_secret(value: Any, current_value: Any) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return False
+    return text == "****" or text == _mask_secret(current_value)
+
+
+def _coerce_webui_config_value(key: str, value: Any, schema: dict[str, Any]) -> tuple[bool, Any, str]:
+    field = schema.get(key) or {}
+    value_type = field.get("type")
+    options = field.get("options")
+    if value_type == "bool":
+        if isinstance(value, bool):
+            coerced = value
+        elif isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on", "y", "启用"}:
+                coerced = True
+            elif normalized in {"0", "false", "no", "off", "n", "关闭"}:
+                coerced = False
+            else:
+                return False, None, f"{key} 必须是布尔值"
+        else:
+            return False, None, f"{key} 必须是布尔值"
+    elif value_type == "int":
+        coerced = _safe_int(value)
+        if coerced is None:
+            return False, None, f"{key} 必须是整数"
+        minimum, maximum = WEBUI_INT_RANGES.get(key, (None, None))
+        if minimum is not None and coerced < minimum:
+            return False, None, f"{key} 不能小于 {minimum}"
+        if maximum is not None and coerced > maximum:
+            return False, None, f"{key} 不能大于 {maximum}"
+    elif value_type == "string":
+        coerced = "" if value is None else str(value).strip()
+        if options and all(isinstance(option, str) for option in options):
+            normalized = coerced.lower()
+            if normalized in options:
+                coerced = normalized
+    else:
+        coerced = value
+
+    if options and coerced not in options:
+        return False, None, f"{key} 必须是以下值之一：{', '.join(map(str, options))}"
+    return True, coerced, ""
 
 
 def _clamp_float(value: Any, minimum: float = 0.0, maximum: float = 1.0) -> float:
@@ -511,7 +667,12 @@ class VolcBigModelAsrClient:
         return "火山引擎 ASR 未配置：请填写 api_key，或同时填写 app_key 和 access_key。"
 
     async def close(self) -> None:
-        await self._client.aclose()
+        aclose = getattr(self._client, "aclose", None)
+        if callable(aclose):
+            await aclose()
+
+    def stream(self, method: str, url: str):
+        return self._client.stream(method, url)
 
     async def recognize(self, audio: dict[str, str]) -> AsrResult:
         request_id = str(uuid.uuid4())
@@ -590,12 +751,7 @@ class VolcBigModelAsrClient:
         duration: Any = (body.get("audio_info") or {}).get("duration")
         if duration is None:
             duration = (result.get("additions") or {}).get("duration")
-        try:
-            duration_ms = int(duration)
-        except (TypeError, ValueError):
-            duration_ms = None
-
-        return text, duration_ms
+        return text, _safe_int(duration)
 
 
 class VolcengineAsrPlugin(Star):
@@ -603,87 +759,208 @@ class VolcengineAsrPlugin(Star):
         super().__init__(context)
         self.config = config
         self.client = VolcBigModelAsrClient(config)
-        self.auto_recognize = _config_bool(config, "auto_recognize", True)
-        self.enable_private = _config_bool(config, "enable_private", True)
-        self.enable_group = _config_bool(config, "enable_group", True)
-        self.only_when_at_or_wake = _config_bool(config, "only_when_at_or_wake", False)
-        self.ignore_self = _config_bool(config, "ignore_self", True)
+        self._reload_runtime_config(recreate_client=False)
+
+    def _reload_runtime_config(self, *, recreate_client: bool = True) -> None:
+        if recreate_client:
+            old_client = self.client
+            self.client = VolcBigModelAsrClient(self.config)
+            self._close_old_client(old_client)
+        self.auto_recognize = _config_bool(self.config, "auto_recognize", True)
+        self.enable_private = _config_bool(self.config, "enable_private", True)
+        self.enable_group = _config_bool(self.config, "enable_group", True)
+        self.only_when_at_or_wake = _config_bool(self.config, "only_when_at_or_wake", False)
+        self.ignore_self = _config_bool(self.config, "ignore_self", True)
         self.stop_event_after_recognition = _config_bool(
-            config,
+            self.config,
             "stop_event_after_recognition",
             True,
         )
-        self.send_empty_result_message = _config_bool(config, "send_empty_result_message", True)
-        self.notify_config_error = _config_bool(config, "notify_config_error", True)
-        self.notify_asr_error = _config_bool(config, "notify_asr_error", True)
-        self.show_logid = _config_bool(config, "show_logid", False)
-        self.submit_mode = _config_str(config, "submit_mode", "base64").lower()
-        self.inject_as_user_input = _config_bool(config, "inject_as_user_input", True)
-        self.enable_emotion_analysis = _config_bool(config, "enable_emotion_analysis", False)
-        self.emotion_model_id = _config_str(config, "emotion_model_id", "")
-        self.emotion_context_turns = max(0, _config_int(config, "emotion_context_turns", 4))
+        self.send_empty_result_message = _config_bool(self.config, "send_empty_result_message", True)
+        self.notify_config_error = _config_bool(self.config, "notify_config_error", True)
+        self.notify_asr_error = _config_bool(self.config, "notify_asr_error", True)
+        self.show_logid = _config_bool(self.config, "show_logid", False)
+        self.submit_mode = _config_str(self.config, "submit_mode", "base64").lower()
+        self.inject_as_user_input = _config_bool(self.config, "inject_as_user_input", True)
+        self.enable_emotion_analysis = _config_bool(self.config, "enable_emotion_analysis", False)
+        self.emotion_model_id = _config_str(self.config, "emotion_model_id", "")
+        self.emotion_context_turns = max(0, _config_int(self.config, "emotion_context_turns", 4))
         self.emotion_max_respect_weight = _clamp_float(
-            _config_int(config, "emotion_max_respect_weight_percent", 60) / 100,
+            _config_int(self.config, "emotion_max_respect_weight_percent", 60) / 100,
         )
-        self.emotion_timeout_seconds = max(1, _config_int(config, "emotion_timeout_seconds", 20))
-        self.emotion_fail_open = _config_bool(config, "emotion_fail_open", True)
+        self.emotion_timeout_seconds = max(1, _config_int(self.config, "emotion_timeout_seconds", 20))
+        self.emotion_fail_open = _config_bool(self.config, "emotion_fail_open", True)
         self.emotion_prompt_template = _config_str(
-            config,
+            self.config,
             "emotion_prompt_template",
             DEFAULT_EMOTION_PROMPT_TEMPLATE,
         ) or DEFAULT_EMOTION_PROMPT_TEMPLATE
         self.voice_prompt_template = _config_str(
-            config,
+            self.config,
             "voice_prompt_template",
             DEFAULT_VOICE_PROMPT_TEMPLATE,
         ) or DEFAULT_VOICE_PROMPT_TEMPLATE
-        self.inject_on_unclear_voice = _config_bool(config, "inject_on_unclear_voice", True)
+        self.inject_on_unclear_voice = _config_bool(self.config, "inject_on_unclear_voice", True)
         self.unclear_voice_prompt = _config_str(
-            config,
+            self.config,
             "unclear_voice_prompt",
             DEFAULT_UNCLEAR_VOICE_PROMPT,
         ) or DEFAULT_UNCLEAR_VOICE_PROMPT
-        self.reply_transcription = _config_bool(config, "reply_transcription", False)
-        self.reply_template = _config_str(config, "reply_template", "语音转文字：{text}")
-        self.max_audio_bytes = max(1, _config_int(config, "max_audio_mb", 20)) * 1024 * 1024
-        self.enable_transcode = _config_bool(config, "enable_transcode", True)
-        self.prefer_bundled_ffmpeg = _config_bool(config, "prefer_bundled_ffmpeg", True)
-        configured_ffmpeg_path = _config_str(config, "ffmpeg_path", "auto") or "auto"
+        self.reply_transcription = _config_bool(self.config, "reply_transcription", False)
+        self.reply_template = _config_str(self.config, "reply_template", "语音转文字：{text}")
+        self.max_audio_bytes = max(1, _config_int(self.config, "max_audio_mb", 20)) * 1024 * 1024
+        self.enable_transcode = _config_bool(self.config, "enable_transcode", True)
+        self.prefer_bundled_ffmpeg = _config_bool(self.config, "prefer_bundled_ffmpeg", True)
+        configured_ffmpeg_path = _config_str(self.config, "ffmpeg_path", "auto") or "auto"
         self.ffmpeg_path, self.ffmpeg_source = _resolve_ffmpeg_path(
             configured_ffmpeg_path,
             self.prefer_bundled_ffmpeg,
         )
-        self.transcode_sample_rate = max(8000, _config_int(config, "transcode_sample_rate", 16000))
-        self.transcode_channels = max(1, _config_int(config, "transcode_channels", 1))
-        self.transcode_output_format = _config_str(config, "transcode_output_format", "wav").lower()
+        self.transcode_sample_rate = max(8000, _config_int(self.config, "transcode_sample_rate", 16000))
+        self.transcode_channels = max(1, _config_int(self.config, "transcode_channels", 1))
+        self.transcode_output_format = _config_str(self.config, "transcode_output_format", "wav").lower()
         if self.transcode_output_format not in {"wav", "mp3", "ogg"}:
             self.transcode_output_format = "wav"
+
+    @staticmethod
+    def _close_old_client(client: VolcBigModelAsrClient) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            try:
+                asyncio.run(client.close())
+            except RuntimeError:
+                logger.warning("旧 ASR HTTP client 未能立即关闭，将等待插件退出时由进程回收。")
+            return
+        loop.create_task(client.close())
 
     @filter.command("volc_asr_status", alias={"火山语音状态"})
     async def volc_asr_status(self, event: AstrMessageEvent):
         """查看火山引擎语音识别插件配置状态。"""
-        auth_status = "已配置" if not self.client.validate() else "未配置"
-        mode = "URL 直传" if self.submit_mode == "url" else "Base64 上传"
-        handling_mode = (
-            "注入为用户输入"
-            if self.inject_as_user_input and not self.reply_transcription
-            else "直接回复转写"
-        )
+        state = self.get_webui_state()
         yield event.plain_result(
             "火山引擎语音识别插件状态："
-            f"\n鉴权：{auth_status}"
-            f"\n提交方式：{mode}"
-            f"\n处理方式：{handling_mode}"
-            f"\n自动转码：{'启用' if self.enable_transcode else '关闭'}"
-            f"\n转码输出：{self.transcode_output_format}"
-            f"\nffmpeg来源：{self.ffmpeg_source}"
-            f"\n私聊：{'启用' if self.enable_private else '关闭'}"
-            f"\n群聊：{'启用' if self.enable_group else '关闭'}"
-            f"\n最大音频：{self.max_audio_bytes // 1024 // 1024} MB"
-            f"\n情绪判断：{'启用' if self.enable_emotion_analysis else '关闭'}"
-            f"\n情绪模型：{self.emotion_model_id or '当前会话主 LLM'}"
-            f"\n情绪最大参考权重：{int(self.emotion_max_respect_weight * 100)}%"
+            f"\n鉴权：{'已配置' if state['auth_configured'] else '未配置'}"
+            f"\n提交方式：{state['submit_mode_label']}"
+            f"\n处理方式：{state['handling_mode']}"
+            f"\n自动转码：{'启用' if state['enable_transcode'] else '关闭'}"
+            f"\n转码输出：{state['transcode_output_format']}"
+            f"\nffmpeg来源：{state['ffmpeg_source']}"
+            f"\n私聊：{'启用' if state['enable_private'] else '关闭'}"
+            f"\n群聊：{'启用' if state['enable_group'] else '关闭'}"
+            f"\n最大音频：{state['max_audio_mb']} MB"
+            f"\n情绪判断：{'启用' if state['emotion']['enabled'] else '关闭'}"
+            f"\n情绪模型：{state['emotion']['model_id']}"
+            f"\n情绪最大参考权重：{state['emotion']['max_respect_weight_percent']}%"
         )
+
+    def get_webui_state(self) -> dict[str, Any]:
+        """Return a stable status/config snapshot reserved for future Web UI pages.
+
+        Future Web UI code should use this method instead of reading plugin attributes directly.
+        """
+        auth_error = self.client.validate()
+        return {
+            "schema_version": 1,
+            "auth_configured": not auth_error,
+            "auth_mode": "api_key" if self.client.api_key else "app_key_access_key" if self.client.app_key and self.client.access_key else "none",
+            "validation_error": auth_error,
+            "endpoint": self.client.endpoint,
+            "resource_id": self.client.resource_id,
+            "timeout_seconds": self.client.timeout_seconds,
+            "submit_mode": self.submit_mode,
+            "submit_mode_label": "URL 直传" if self.submit_mode == "url" else "Base64 上传",
+            "handling_mode": (
+                "注入为用户输入"
+                if self.inject_as_user_input and not self.reply_transcription
+                else "直接回复转写"
+            ),
+            "auto_recognize": self.auto_recognize,
+            "enable_private": self.enable_private,
+            "enable_group": self.enable_group,
+            "only_when_at_or_wake": self.only_when_at_or_wake,
+            "ignore_self": self.ignore_self,
+            "enable_transcode": self.enable_transcode,
+            "transcode_output_format": self.transcode_output_format,
+            "transcode_sample_rate": self.transcode_sample_rate,
+            "transcode_channels": self.transcode_channels,
+            "prefer_bundled_ffmpeg": self.prefer_bundled_ffmpeg,
+            "ffmpeg_path": self.ffmpeg_path,
+            "ffmpeg_source": self.ffmpeg_source,
+            "max_audio_mb": _max_mb_text(self.max_audio_bytes),
+            "enable_itn": self.client.enable_itn,
+            "enable_punc": self.client.enable_punc,
+            "enable_ddc": self.client.enable_ddc,
+            "enable_speaker_info": self.client.enable_speaker_info,
+            "livingmemory_safe": self.inject_as_user_input and not self.reply_transcription,
+            "emotion": {
+                "enabled": self.enable_emotion_analysis,
+                "model_id": self.emotion_model_id or "当前会话主 LLM",
+                "context_turns": self.emotion_context_turns,
+                "max_respect_weight_percent": int(self.emotion_max_respect_weight * 100),
+                "timeout_seconds": self.emotion_timeout_seconds,
+                "fail_open": self.emotion_fail_open,
+            },
+            "config": {
+                "reply_transcription": self.reply_transcription,
+                "inject_as_user_input": self.inject_as_user_input,
+                "stop_event_after_recognition": self.stop_event_after_recognition,
+                "send_empty_result_message": self.send_empty_result_message,
+                "notify_config_error": self.notify_config_error,
+                "notify_asr_error": self.notify_asr_error,
+                "show_logid": self.show_logid,
+            },
+        }
+
+    def get_webui_config_schema(self) -> dict[str, Any]:
+        """Return the plugin config schema reserved for future Web UI forms."""
+        return _read_json_file(WEBUI_CONFIG_SCHEMA_PATH)
+
+    def get_webui_config_snapshot(self) -> dict[str, Any]:
+        """Return current config values for future Web UI editing surfaces."""
+        schema = self.get_webui_config_schema()
+        snapshot: dict[str, Any] = {}
+        for key in WEBUI_CONFIG_KEYS:
+            value = self.config.get(key, (schema.get(key) or {}).get("default", ""))
+            snapshot[key] = _mask_secret(value) if key in WEBUI_SECRET_CONFIG_KEYS else value
+        return snapshot
+
+    def update_webui_config(self, updates: dict[str, Any]) -> dict[str, Any]:
+        """Apply validated config updates reserved for future Web UI save actions."""
+        if not isinstance(updates, dict):
+            return {"applied": {}, "skipped": {}, "errors": {"updates": "updates 必须是对象"}}
+
+        schema = self.get_webui_config_schema()
+        applied: dict[str, Any] = {}
+        skipped: dict[str, str] = {}
+        errors: dict[str, str] = {}
+        needs_client_reload = False
+
+        for key, value in updates.items():
+            if key not in WEBUI_CONFIG_KEYS:
+                skipped[key] = "未知配置项"
+                continue
+            if key in WEBUI_SECRET_CONFIG_KEYS and _is_unchanged_masked_secret(
+                value,
+                self.config.get(key),
+            ):
+                skipped[key] = "密钥未变更"
+                continue
+
+            ok, coerced, error = _coerce_webui_config_value(key, value, schema)
+            if not ok:
+                errors[key] = error
+                continue
+
+            self.config[key] = coerced
+            applied[key] = _mask_secret(coerced) if key in WEBUI_SECRET_CONFIG_KEYS else coerced
+            if key in WEBUI_CLIENT_CONFIG_KEYS:
+                needs_client_reload = True
+
+        if applied:
+            self._reload_runtime_config(recreate_client=needs_client_reload)
+
+        return {"applied": applied, "skipped": skipped, "errors": errors}
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=10)
     async def on_message(self, event: AstrMessageEvent):
@@ -704,44 +981,10 @@ class VolcengineAsrPlugin(Star):
                 event.stop_event()
             return
 
-        results: list[AsrResult] = []
-        errors: list[str] = []
-        unclear_count = 0
-        for index, record in enumerate(records, start=1):
-            try:
-                audio = await self._build_audio_payload(record)
-                result = await self.client.recognize(audio)
-                if result.text:
-                    results.append(result)
-                else:
-                    unclear_count += 1
-                    if self.send_empty_result_message and not self.inject_on_unclear_voice:
-                        errors.append(f"第 {index} 条语音未识别到有效内容。")
-            except UserVisibleError as exc:
-                logger.warning(f"语音识别准备失败：{exc}")
-                if self.notify_asr_error:
-                    errors.append(f"第 {index} 条语音处理失败：{exc}")
-            except VolcAsrError as exc:
-                logger.warning(
-                    "火山引擎 ASR 失败："
-                    f"status={exc.status_code} "
-                    f"logid={exc.logid} "
-                    f"request_id={exc.request_id} "
-                    f"error={exc}"
-                )
-                if exc.status_code == VOLC_SILENT_AUDIO_CODE:
-                    unclear_count += 1
-                    if self.send_empty_result_message and not self.inject_on_unclear_voice:
-                        errors.append(f"第 {index} 条语音是静音音频。")
-                elif self.notify_asr_error:
-                    detail = str(exc)
-                    if self.show_logid and exc.logid:
-                        detail = f"{detail}（logid: {exc.logid}）"
-                    errors.append(f"第 {index} 条语音识别失败：{detail}")
-            except Exception:
-                logger.exception("语音识别出现未预期异常")
-                if self.notify_asr_error:
-                    errors.append(f"第 {index} 条语音识别失败：插件内部异常。")
+        batch = await self._recognize_records(records)
+        results = batch.results
+        errors = batch.errors
+        unclear_count = batch.unclear_count
 
         inject_mode = self.inject_as_user_input and not self.reply_transcription
 
@@ -870,6 +1113,49 @@ class VolcengineAsrPlugin(Star):
         self_id = getattr(message_obj, "self_id", None)
         return bool(sender_id and self_id and str(sender_id) == str(self_id))
 
+    async def _recognize_records(self, records: list[Any]) -> RecognitionBatch:
+        batch = RecognitionBatch(results=[], errors=[])
+        for index, record in enumerate(records, start=1):
+            try:
+                result = await self.client.recognize(await self._build_audio_payload(record))
+                if result.text:
+                    batch.results.append(result)
+                else:
+                    self._add_unclear_error(batch, index, "未识别到有效内容")
+            except UserVisibleError as exc:
+                logger.warning(f"语音识别准备失败：{exc}")
+                if self.notify_asr_error:
+                    batch.errors.append(f"第 {index} 条语音处理失败：{exc}")
+            except VolcAsrError as exc:
+                self._handle_asr_error(batch, index, exc)
+            except Exception:
+                logger.exception("语音识别出现未预期异常")
+                if self.notify_asr_error:
+                    batch.errors.append(f"第 {index} 条语音识别失败：插件内部异常。")
+        return batch
+
+    def _add_unclear_error(self, batch: RecognitionBatch, index: int, reason: str) -> None:
+        batch.unclear_count += 1
+        if self.send_empty_result_message and not self.inject_on_unclear_voice:
+            batch.errors.append(f"第 {index} 条语音{reason}。")
+
+    def _handle_asr_error(self, batch: RecognitionBatch, index: int, exc: VolcAsrError) -> None:
+        logger.warning(
+            "火山引擎 ASR 失败："
+            f"status={exc.status_code} "
+            f"logid={exc.logid} "
+            f"request_id={exc.request_id} "
+            f"error={exc}"
+        )
+        if exc.status_code == VOLC_SILENT_AUDIO_CODE:
+            self._add_unclear_error(batch, index, "是静音音频")
+            return
+        if self.notify_asr_error:
+            detail = str(exc)
+            if self.show_logid and exc.logid:
+                detail = f"{detail}（logid: {exc.logid}）"
+            batch.errors.append(f"第 {index} 条语音识别失败：{detail}")
+
     async def _build_audio_payload(self, record: Any) -> dict[str, str]:
         sources = _extract_record_sources(record)
         if self.submit_mode == "url":
@@ -879,11 +1165,9 @@ class VolcengineAsrPlugin(Star):
 
         audio_bytes, source = await self._record_to_audio_bytes(record, sources)
         audio_bytes = await self._maybe_transcode_audio(audio_bytes, source)
+        if len(audio_bytes) > self.max_audio_bytes:
+            raise UserVisibleError(f"音频超过配置上限 {_max_mb_text(self.max_audio_bytes)} MB。")
         base64_audio = base64.b64encode(audio_bytes).decode("ascii")
-        audio_size = _estimate_base64_size(base64_audio)
-        if audio_size > self.max_audio_bytes:
-            max_mb = self.max_audio_bytes // 1024 // 1024
-            raise UserVisibleError(f"音频超过配置上限 {max_mb} MB。")
         return {"data": base64_audio}
 
     async def _record_to_audio_bytes(self, record: Any, sources: list[str]) -> tuple[bytes, str]:
@@ -919,29 +1203,31 @@ class VolcengineAsrPlugin(Star):
     async def _file_to_bytes(self, path: Path) -> bytes:
         size = path.stat().st_size
         if size > self.max_audio_bytes:
-            max_mb = self.max_audio_bytes // 1024 // 1024
-            raise UserVisibleError(f"音频超过配置上限 {max_mb} MB。")
+            raise UserVisibleError(f"音频超过配置上限 {_max_mb_text(self.max_audio_bytes)} MB。")
         return await self._read_bytes(path)
 
     async def _download_bytes(self, url: str) -> bytes:
         chunks: list[bytes] = []
         total = 0
-        timeout = httpx.Timeout(self.client.timeout_seconds, connect=10.0)
         try:
-            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-                async with client.stream("GET", url) as response:
-                    response.raise_for_status()
-                    async for chunk in response.aiter_bytes():
-                        total += len(chunk)
-                        if total > self.max_audio_bytes:
-                            max_mb = self.max_audio_bytes // 1024 // 1024
-                            raise UserVisibleError(f"音频超过配置上限 {max_mb} MB。")
-                        chunks.append(chunk)
+            async with self.client.stream("GET", url) as response:
+                response.raise_for_status()
+                self._raise_if_content_too_large(response)
+                async for chunk in response.aiter_bytes():
+                    total += len(chunk)
+                    if total > self.max_audio_bytes:
+                        raise UserVisibleError(f"音频超过配置上限 {_max_mb_text(self.max_audio_bytes)} MB。")
+                    chunks.append(chunk)
         except httpx.HTTPError as exc:
             raise UserVisibleError(f"下载语音文件失败：{exc}") from exc
         if not chunks:
             raise UserVisibleError("语音文件为空。")
         return b"".join(chunks)
+
+    def _raise_if_content_too_large(self, response: httpx.Response) -> None:
+        content_length = _safe_int(response.headers.get("content-length"))
+        if content_length is not None and content_length > self.max_audio_bytes:
+            raise UserVisibleError(f"音频超过配置上限 {_max_mb_text(self.max_audio_bytes)} MB。")
 
     async def _maybe_transcode_audio(self, data: bytes, source: str) -> bytes:
         suffix = _detect_audio_suffix(data, source)
@@ -1008,8 +1294,7 @@ class VolcengineAsrPlugin(Star):
             raise UserVisibleError(f"ffmpeg 转码失败：{error_text or '没有输出'}")
 
         if len(stdout) > self.max_audio_bytes:
-            max_mb = self.max_audio_bytes // 1024 // 1024
-            raise UserVisibleError(f"转码后的音频超过配置上限 {max_mb} MB。")
+            raise UserVisibleError(f"转码后的音频超过配置上限 {_max_mb_text(self.max_audio_bytes)} MB。")
 
         logger.info(
             f"已将语音从 {suffix or '未知格式'} 转码为 {output_format}，"
@@ -1021,26 +1306,19 @@ class VolcengineAsrPlugin(Star):
     async def _read_bytes(path: Path) -> bytes:
         return await asyncio.to_thread(path.read_bytes)
 
+    def _build_result_values(self, results: list[AsrResult]) -> dict[str, Any]:
+        text = self._build_transcription_text(results)
+        return {
+            "text": text,
+            "logid": ",".join(item.logid for item in results if item.logid),
+            "request_id": ",".join(item.request_id for item in results),
+            "duration_ms": results[0].duration_ms or "" if len(results) == 1 else "",
+        }
+
     def _build_reply(self, results: list[AsrResult], errors: list[str]) -> str:
         parts: list[str] = []
         if results:
-            if len(results) == 1:
-                text = results[0].text
-                values = {
-                    "text": text,
-                    "logid": results[0].logid,
-                    "request_id": results[0].request_id,
-                    "duration_ms": results[0].duration_ms or "",
-                }
-            else:
-                text = "\n".join(f"{index}. {item.text}" for index, item in enumerate(results, start=1))
-                values = {
-                    "text": text,
-                    "logid": ",".join(item.logid for item in results if item.logid),
-                    "request_id": ",".join(item.request_id for item in results),
-                    "duration_ms": "",
-                }
-            parts.append(_format_with_fallback(self.reply_template, values))
+            parts.append(_format_with_fallback(self.reply_template, self._build_result_values(results)))
             if self.show_logid:
                 logids = [item.logid for item in results if item.logid]
                 if logids:
@@ -1148,16 +1426,7 @@ class VolcengineAsrPlugin(Star):
         return "\n".join(f"{index}. {item.text}" for index, item in enumerate(results, start=1))
 
     def _build_llm_user_text(self, results: list[AsrResult]) -> str:
-        text = self._build_transcription_text(results)
-
-        template = self.voice_prompt_template
-        values = {
-            "text": text,
-            "logid": ",".join(item.logid for item in results if item.logid),
-            "request_id": ",".join(item.request_id for item in results),
-            "duration_ms": results[0].duration_ms or "" if len(results) == 1 else "",
-        }
-        return _render_prompt_template(template, values)
+        return _render_prompt_template(self.voice_prompt_template, self._build_result_values(results))
 
     @staticmethod
     def _inject_user_text(
@@ -1174,8 +1443,13 @@ class VolcengineAsrPlugin(Star):
             setattr(message_obj, "message_str", memory_text)
             setattr(message_obj, "message", [Comp.Plain(memory_text)])
 
-        event.set_extra(ASR_EXTRA_TEXT, raw_text or memory_text)
-        event.set_extra(ASR_EXTRA_MEMORY_TEXT, memory_text)
-        event.set_extra(ASR_EXTRA_LLM_TEXT, llm_text)
-        event.set_extra(ASR_EXTRA_INJECTED, True)
-        event.set_extra(ASR_EXTRA_UNCLEAR, unclear)
+        _set_event_extras(
+            event,
+            {
+                ASR_EXTRA_TEXT: raw_text or memory_text,
+                ASR_EXTRA_MEMORY_TEXT: memory_text,
+                ASR_EXTRA_LLM_TEXT: llm_text,
+                ASR_EXTRA_INJECTED: True,
+                ASR_EXTRA_UNCLEAR: unclear,
+            },
+        )
