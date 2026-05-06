@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="250" height="54" viewBox="0 0 250 54" role="img" aria-labelledby="title desc">
   <title id="title">Fuck-U-Code 代码质量评分</title>
-  <desc id="desc">参考 ShitMountain 风格的 250x54 极简评分卡，展示由 GitHub Actions bot 自动更新的 fuck-u-code 分数 70.00。</desc>
+  <desc id="desc">参考 ShitMountain 风格的 250x54 极简评分卡，展示由 GitHub Actions bot 自动更新的 fuck-u-code 分数 71.00。</desc>
   <defs>
     <style type="text/css">
       .text-bold { font-family: 'Helvetica Bold', Helvetica, Arial, sans-serif; font-weight: bold; }
@@ -20,6 +20,6 @@
 
   <g transform="translate(185, 13)" fill="#5D4037">
     <text x="35" y="10" font-size="9" class="text-regular" text-anchor="middle">SCORE</text>
-    <text x="35" y="28" font-size="18" class="text-bold" text-anchor="middle">70.00</text>
+    <text x="35" y="28" font-size="18" class="text-bold" text-anchor="middle">71.00</text>
   </g>
 </svg>
