@@ -463,77 +463,76 @@ flowchart TB
 > [!WARNING]
 > `respect_weight` 是提示词影响强度的限幅参数，不是情绪概率、心理强度、置信校准结果或可跨模型比较的统计指标。不同 LLM、不同 prompt、不同上下文下输出不可直接横向比较。
 
+下面的公式使用 GitHub 支持的 `math` 代码块渲染。若在不支持 GitHub 数学表达式的 Markdown 查看器中阅读，可以直接看后面的纯文本 fallback。
+
 令：
 
-- `t`：转写文本字符数。
-- `c`：情绪 LLM 输出的 `confidence`。
-- `p_i`：归一化后的第 `i` 个情绪权重。
-- `n`：有效情绪标签数。
-- `s_v`：`voice_text_support`。
-- `s_c`：`context_support`。
-- `rmax`：`emotion_max_respect_weight_percent / 100`。
+- $t$：转写文本字符数。
+- $c$：情绪 LLM 输出的 `confidence`。
+- $p_i$：归一化后的第 $i$ 个情绪权重。
+- $n$：有效情绪标签数。
+- $s_v$：`voice_text_support`。
+- $s_c$：`context_support`。
+- $r_{\max}$：`emotion_max_respect_weight_percent / 100`。
 
 情绪分布的 Shannon 熵为：
 
-```text
-H(p) = -sum(p_i * log(p_i), i = 1..n)
+```math
+H(\mathbf{p}) = -\sum_{i=1}^{n} p_i \log(p_i)
 ```
 
 归一化确定性为：
 
-当 `n <= 1` 时：
-
-```text
-C(p) = 1
-```
-
-当 `n > 1` 时：
-
-```text
-C(p) = 1 - H(p) / log(n)
+```math
+C(\mathbf{p}) =
+\begin{cases}
+1, & n \le 1 \\
+1 - \dfrac{H(\mathbf{p})}{\log n}, & n > 1
+\end{cases}
 ```
 
 文本长度因子为：
 
-```text
-L(t) = min(1, log(1 + max(0, t)) / log(81))
+```math
+L(t) = \min \left(1,\frac{\log(1+\max(0,t))}{\log 81}\right)
 ```
 
 证据强度为：
 
-```text
-E = L(t) * (0.7 * s_v + 0.3 * s_c)
+```math
+E = L(t)\left(0.7s_v + 0.3s_c\right)
 ```
 
 经过置信度与证据门控后的确定性为：
 
-```text
-C'(p) = C(p) * max(c, E)
+```math
+C'(\mathbf{p}) = C(\mathbf{p})\max(c,E)
 ```
 
 最终参考权重为：
 
-```text
-r = rmax * (0.5 * c + 0.3 * C'(p) + 0.2 * E)
+```math
+r = r_{\max}\left(0.5c + 0.3C'(\mathbf{p}) + 0.2E\right)
 ```
 
 短文本保护规则：
 
-当 `t < 12` 时：
-
-```text
-r = min(r, 0.25)
+```math
+r_{\text{short}} =
+\begin{cases}
+\min(r,0.25), & t < 12 \\
+r, & t \ge 12
+\end{cases}
 ```
-
-当 `t >= 12` 时，`r` 保持不变。
 
 最终输出：
 
-```text
-respect_weight = round(clip(r, 0, rmax), 3)
+```math
+\mathrm{respect\_weight}
+= \mathrm{round}\left(\mathrm{clip}(r_{\text{short}},0,r_{\max}),3\right)
 ```
 
-纯文本 fallback：
+非 GitHub 渲染器的纯文本 fallback：
 
 ```text
 certainty = 1 - entropy(weights) / log(label_count)
