@@ -1,7 +1,7 @@
 ﻿<!-- markdownlint-disable MD024 MD033 MD041 MD051 -->
 
 <p align="center">
-  <img src="./assets/komari-wave.gif" alt="项目吉祥物小鞠挥手动图" width="210">
+  <img src="./assets/komari-wave.gif" alt="项目吉祥物小鞠挥手动图" width="160">
 </p>
 
 <h1 align="center">AstrBot 火山引擎语音转文字插件</h1>
@@ -28,7 +28,7 @@
 </p>
 
 <p align="center">
-  <sub>小鞠在 README 门口值班。少、少啰嗦，她只是提醒后来维护的人：主线能力要讲清楚，bugfix 要收进修补史。本项目为纯粹的 Vibe Coding 产物，小鞠陪伴着我走过了无数个“炼丹”的工作时，感谢小鞠以及小 G 老师的全程保障。作为绝对的核心幕后成员，我觉得我必须让小鞠出现在这儿。</sub>
+  <sub>小鞠在 README 门口值班：提醒维护者讲清主线能力，别让 bugfix 淹没文档。</sub>
 </p>
 
 ---
@@ -56,6 +56,9 @@
 
 `2.1.12-pr1` 是基于 `2.1.12` 的实验性硬化版本，版本号中的 `pr1` 表示它用于 PR / 预发布验证，不是正式稳定标签。它的重点不是新增一条炫目的功能，而是继续解决真实 AstrBot / NapCat / Docker 环境里最容易反复出现的后段残留问题。
 
+> [!WARNING]
+> 这是 PR / 预发布验证版，不是稳定 Release 承诺。不建议在没有回滚方案的生产机器人上直接启用。下面的验证记录只代表作者当前测试条件，不代表所有 AstrBot / NapCat / Docker 部署都能复现；因实验版本导致的识别失败、回复异常、额外 token 消耗、延迟增加或第三方服务费用变化，均需由部署者自行评估和承担。
+
 这版主要更新：
 
 | 类别 | 更新内容 | 解决的问题 |
@@ -77,6 +80,9 @@
 | 包体校验 | 正式 Release 附件请以发布说明中的 SHA256 为准；本地重新打包会因为 README 内容变化产生新的 SHA256。 |
 
 一句话概括：`pr1` 是“真实环境残留语音对象清理 + ProviderRequest 防崩 + 上传文档完善”的实验验证版。
+
+> [!NOTE]
+> `agent 前清理` 和 `ProviderRequest 防崩` 是针对已知 AstrBot / NapCat / 插件缓存形态的兼容加固，用于降低问题复发概率，不保证覆盖所有自定义缓存、第三方插件写入方式或未来 AstrBot 内部结构变化。
 
 ---
 
@@ -115,6 +121,9 @@
 Record(file="32c1124cf292f19c30728a54db34992e.amr")
 ```
 
+> [!WARNING]
+> `xxx.amr` 在 OneBot / NapCat / Docker 场景中经常只是语音资源标识，不一定是 AstrBot 容器内真实可读文件。本插件会尽量通过 `get_record`、URL 下载、Base64 上传、转码和后段清理降低风险，但不保证能修复官方预处理、容器挂载、适配器返回路径或第三方插件缓存造成的所有 `not a valid file`。免责声明：部署者需要自行确认容器卷映射、NapCat 配置、AstrBot 版本和插件组合；因此类环境差异造成的识别失败、日志 warning、消息处理中断或额外排障成本，不应视为插件对生产环境的稳定承诺。
+
 这个 `file` 很多时候不是 AstrBot 容器内真实存在的文件路径，而是 OneBot / NapCat 的语音资源标识。如果它被 AstrBot 官方预处理或后续 agent 当作本地文件读取，就可能出现：
 
 ```text
@@ -126,6 +135,9 @@ not a valid file: xxx.amr
 <a id="core-capabilities"></a>
 
 ## 核心能力
+
+> [!WARNING]
+> 下表描述的是插件设计能力和默认行为，不等同于对所有 AstrBot 版本、所有插件组合、所有 OneBot 适配器、所有容器路径映射的兼容承诺。真实环境仍应以 `/volc_asr_status`、AstrBot 日志和测试语音结果为准。
 
 | 能力 | 默认状态 | 说明 |
 | :--- | :--- | :--- |
@@ -163,10 +175,8 @@ not a valid file: xxx.amr
 
 重要提醒：
 
-```text
-请下载 Release 页面里的 astrbot_plugin_volcengine_asr.zip。
-不要把 GitHub 绿色 Code 按钮下载的 Source code zip 当作安装包。
-```
+> [!WARNING]
+> 请下载 Release 页面里的 `astrbot_plugin_volcengine_asr.zip`。不要把 GitHub 绿色 Code 按钮下载的 Source code zip 当作安装包；Source code zip 的顶层目录、内置 ffmpeg、元数据位置和 AstrBot 上传安装器预期可能不一致。免责声明：如果使用非 Release 附件安装，导致插件加载失败、缺少文件、ffmpeg 不可用或版本不一致，需要部署者自行回滚、重装或重新打包。
 
 Release zip 固定为单顶层目录结构：
 
@@ -198,6 +208,9 @@ https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr.git
 ```
 
 仓库安装会读取仓库根目录的 `metadata.yaml`、`main.py`、`_conf_schema.json` 和 `requirements.txt`。但仓库安装不等同于 Release zip 安装：仓库根目录不一定带 Release 包内置的 `bin/linux-x86_64/ffmpeg`，因此会依赖 `imageio-ffmpeg` 或系统 PATH 中的 `ffmpeg`。
+
+> [!WARNING]
+> 仓库安装适合熟悉 AstrBot 插件结构的维护者，不等同于经过打包校验的 Release 上传包。免责声明：仓库安装时的依赖解析、ffmpeg 来源、GitHub 网络可达性、分支状态和 AstrBot 安装器行为都可能影响结果；由此造成的安装失败、版本漂移或运行差异，请以当前环境排查结果为准。
 
 ### 最小配置
 
@@ -256,6 +269,9 @@ inject_as_user_input = true
 ## 语音工作流
 
 下面是当前主链路。它不是单纯“收到 Record -> 调 API -> 回文字”，而是多阶段地把语音变成可被 AstrBot 后续流程安全消费的输入。
+
+> [!WARNING]
+> 该图描述的是插件可控链路。AstrBot 官方 `preprocess_stage`、其它插件、适配器私有缓存、容器卷映射和 NapCat 文件返回路径不完全受本插件控制。即使插件后段清理生效，官方前置 warning 或其它插件造成的残留仍可能出现。
 
 ```mermaid
 flowchart TB
@@ -341,6 +357,9 @@ run_context.cache
 
 插件会在消息处理成功后清理一次，并在 `on_agent_begin` 再兜底清理一次。这样做的目标是减少后续 `agent_sub_stages` 再次扫到旧 `Record(file="xxx.amr")` 的概率。
 
+> [!NOTE]
+> 多次清理是“降低残留概率”的工程策略，不是对所有缓存形态的彻底保证。如果其它插件把 `Record`、本地路径或音频 URL 写入私有字段，本插件可能需要新增适配才能发现。
+
 ---
 
 <a id="emotion-layer"></a>
@@ -348,6 +367,9 @@ run_context.cache
 ## 2.0.0 情绪层
 
 `v2.0.0` 是这个插件的核心能力版本。它引入的不是心理诊断，也不是让另一个模型替用户下结论，而是一个可选的、结构化的、受权重约束的“语气参考层”。
+
+> [!WARNING]
+> 情绪层只提供文本层面的语气提示，不具备心理诊断、医学判断、事实判断、风险评估或用户画像能力。它可能误判、漏判或放大语气线索，不应用于医疗、心理咨询、风控、处罚、审核等高影响决策。插件默认关闭该功能；开启前请确认你能接受额外 LLM 调用、token 成本、延迟波动和偶发 JSON 解析失败。
 
 默认关闭：
 
@@ -389,6 +411,9 @@ flowchart TB
 这里是本文档最贴近论文的部分。我个人在审核的过程中直接看力竭了；这部分选择不看、跳过，也不影响插件的使用。
 
 插件的情绪算法不是凭空捏造。它把三个相对稳定的思想工程化地组合起来：
+
+> [!WARNING]
+> 这里引用的是启发式工程设计思想，不代表该插件的情绪识别准确率已经通过学术评测、标注数据集验证或真实场景用户研究。公式和权重只能解释“如何限制提示词影响强度”，不能证明模型判断等于用户真实心理状态。
 
 | 思想 | 在插件中的体现 |
 | :--- | :--- |
@@ -435,72 +460,78 @@ flowchart TB
 
 ### respect_weight 公式
 
+> [!WARNING]
+> `respect_weight` 是提示词影响强度的限幅参数，不是情绪概率、心理强度、置信校准结果或可跨模型比较的统计指标。不同 LLM、不同 prompt、不同上下文下输出不可直接横向比较。
+
 令：
 
-- \(t\)：转写文本字符数。
-- \(c\)：情绪 LLM 输出的 `confidence`。
-- \(p_i\)：归一化后的第 \(i\) 个情绪权重。
-- \(n\)：有效情绪标签数。
-- \(s_v\)：`voice_text_support`。
-- \(s_c\)：`context_support`。
-- \(r_{\max}\)：`emotion_max_respect_weight_percent / 100`。
+- `t`：转写文本字符数。
+- `c`：情绪 LLM 输出的 `confidence`。
+- `p_i`：归一化后的第 `i` 个情绪权重。
+- `n`：有效情绪标签数。
+- `s_v`：`voice_text_support`。
+- `s_c`：`context_support`。
+- `rmax`：`emotion_max_respect_weight_percent / 100`。
 
 情绪分布的 Shannon 熵为：
 
-$$
-H(p) = -\sum_{i=1}^{n} p_i \log p_i
-$$
+```text
+H(p) = -sum(p_i * log(p_i), i = 1..n)
+```
 
 归一化确定性为：
 
-$$
-C(p) =
-\begin{cases}
-1, & n \le 1 \\
-1 - \frac{H(p)}{\log n}, & n > 1
-\end{cases}
-$$
+当 `n <= 1` 时：
+
+```text
+C(p) = 1
+```
+
+当 `n > 1` 时：
+
+```text
+C(p) = 1 - H(p) / log(n)
+```
 
 文本长度因子为：
 
-$$
-L(t) = \min\left(1, \frac{\log(1 + \max(0, t))}{\log 81}\right)
-$$
+```text
+L(t) = min(1, log(1 + max(0, t)) / log(81))
+```
 
 证据强度为：
 
-$$
-E = L(t) \cdot (0.7s_v + 0.3s_c)
-$$
+```text
+E = L(t) * (0.7 * s_v + 0.3 * s_c)
+```
 
 经过置信度与证据门控后的确定性为：
 
-$$
-C'(p) = C(p) \cdot \max(c, E)
-$$
+```text
+C'(p) = C(p) * max(c, E)
+```
 
 最终参考权重为：
 
-$$
-r = r_{\max} \cdot (0.5c + 0.3C'(p) + 0.2E)
-$$
+```text
+r = rmax * (0.5 * c + 0.3 * C'(p) + 0.2 * E)
+```
 
 短文本保护规则：
 
-$$
-r =
-\begin{cases}
-\min(r, 0.25), & t < 12 \\
-r, & t \ge 12
-\end{cases}
-$$
+当 `t < 12` 时：
+
+```text
+r = min(r, 0.25)
+```
+
+当 `t >= 12` 时，`r` 保持不变。
 
 最终输出：
 
-$$
-\operatorname{respect\_weight}
-= \operatorname{round}(\operatorname{clip}(r, 0, r_{\max}), 3)
-$$
+```text
+respect_weight = round(clip(r, 0, rmax), 3)
+```
 
 纯文本 fallback：
 
@@ -526,6 +557,9 @@ respect_weight = round(clamp(respect_weight, 0, max_respect_weight), 3)
 | `r_max` 上限 | 情绪层只能给语气建议，不能覆盖用户明确请求。 |
 
 这套公式的目标不是“算准用户真实情绪”，而是控制主 LLM 的参考强度：证据充分、分布集中、置信度高时多参考；证据弱、文本短、分布散时少参考。
+
+> [!NOTE]
+> 这些权重分配是保守工程策略，不是通过用户研究、标注数据拟合或线上 A/B 实验得到的最优参数。
 
 ### 情绪公式接口
 
@@ -557,6 +591,9 @@ plugin.emotion_weighting_policy = MyEmotionWeightingPolicy()
 
 情绪判断默认关闭，因为它会额外调用一次 LLM。下面是测试服务器上的 1000 次参考值。
 
+> [!WARNING]
+> 以下数据不是压测报告，不代表 SLA，不代表成本上限，也不是性能保证。它只用于估算一次特定模型、特定测试服务器、无上下文情绪调用带来的额外开销。真实端到端语音对话通常还会叠加 ASR、主 LLM、TTS、队列、网络波动和其它插件耗时。
+
 <details open>
 <summary>展开：测试服务器 1000 次参考值（deepseek-v4-flash，无上下文）</summary>
 
@@ -573,8 +610,8 @@ plugin.emotion_weighting_policy = MyEmotionWeightingPolicy()
 | 上下文 | 无历史上下文；`emotion_context_turns = 0` |
 | 上下文占位 | `（无可用上下文）` |
 | 情绪判断 prompt 长度 | 642 个字符 |
-| HTTP 成功率 | 1000 / 1000 |
-| JSON 成功率 | 993 / 1000 |
+| 本次样本 HTTP 返回成功数 | 1000 / 1000，不代表线上可用率 |
+| 本次样本 JSON 可解析数 | 993 / 1000，不代表所有模型都稳定输出 JSON |
 
 增量结果：
 
@@ -584,6 +621,9 @@ plugin.emotion_weighting_policy = MyEmotionWeightingPolicy()
 | `enable_emotion_analysis=true` | 1 次 / 条语音 | 273.0 | 247.5 | 520.5 | 6085.2 ms |
 
 分布：
+
+> [!WARNING]
+> 下表延迟只是一段额外情绪 LLM 调用耗时，不包含 ASR、主 LLM 正常回复、TTS、AstrBot 队列、其它插件或真实用户网络波动。请勿把它当成完整语音对话延迟。
 
 | 指标 | 最小值 | 最大值 | 平均值 | 中位数 | P90 | P95 | P99 | 标准差 |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -615,6 +655,9 @@ plugin.emotion_weighting_policy = MyEmotionWeightingPolicy()
 ## 配置指南
 
 ### 识别与鉴权
+
+> [!WARNING]
+> 火山引擎 ASR、DeepSeek / 其它 LLM、NapCat、OneBot 适配器和 AstrBot 本体都属于第三方或外部依赖。本插件无法保证这些服务的可用性、价格、限额、鉴权策略、接口返回格式或未来兼容性。免责声明：第三方服务产生的费用、限流、鉴权失败、接口调整、网络波动和服务不可用风险，应由部署者按对应平台规则自行评估和承担。
 
 | 配置项 | 类型 | 默认值 | 建议 |
 | :--- | :--- | :--- | :--- |
@@ -654,6 +697,9 @@ plugin.emotion_weighting_policy = MyEmotionWeightingPolicy()
 | `send_empty_result_message` | bool | `true` | 静音或空结果时提示。 |
 
 ### 情绪判断
+
+> [!WARNING]
+> 情绪判断相关配置属于高风险增强项。首次启用建议从较低权重开始；高权重可能放大短文本、反讽、方言、噪声转写错误或上下文缺失导致的误判语气。请勿将其用于心理诊断、情绪监控、用户画像、风控决策或任何需要可靠事实判断的场景。
 
 | 配置项 | 类型 | 默认值 | 建议 |
 | :--- | :--- | :--- | :--- |
@@ -735,6 +781,9 @@ astrbot_plugin_volcengine_asr-main/
 
 注意：这通常发生在插件 handler 之前，属于 AstrBot 官方预处理阶段，不一定代表本插件失败。
 
+> [!WARNING]
+> Docker / NapCat 路径问题通常不是插件单侧能完全修复的故障。插件可以尽量在自己的 handler 和 agent 前后清理旧 `Record`，但无法通过公开插件 API 保证关闭 AstrBot 官方 `preprocess_stage`。容器卷映射、NapCat 文件返回路径、OneBot `get_record` 行为和 AstrBot 官方配置仍需要部署者自行确认。
+
 判断方式：
 
 | 日志位置 | 含义 |
@@ -763,6 +812,9 @@ docker logs --tail=500 astrbot 2>&1 | grep -E 'preprocess_stage|agent_sub_stages
 
 如果仍出现，说明旧 `Record` 可能藏在未覆盖的上下文或其它插件缓存中。请提供：
 
+> [!WARNING]
+> 若其它插件把 `Record`、`.amr` 文件标识或音频 URL 写入私有缓存，本插件不保证能全部发现。需要结合日志定位具体写入来源，再决定是否新增适配。
+
 ```text
 /volc_asr_status
 ```
@@ -772,6 +824,9 @@ docker logs --tail=500 astrbot 2>&1 | grep -E 'preprocess_stage|agent_sub_stages
 ### 报 `'dict' object has no attribute 'model_dump_for_context'`
 
 这是旧版本在净化 `ProviderRequest` 时可能把活对象替换成普通 dict 导致的。当前版本会原地净化 ProviderRequest-like 对象；如果缓存别名本身就是 dict 且含音频引用，会尽量替换成干净的 ProviderRequest。
+
+> [!NOTE]
+> 当前版本针对已知 ProviderRequest-like 形态做兼容处理。若 AstrBot 内部结构或第三方插件缓存格式变化，仍可能需要新的适配。
 
 处理方式：
 
@@ -882,6 +937,9 @@ Get-FileHash .\astrbot_plugin_volcengine_asr.zip -Algorithm SHA256
 
 但这些问题本质上是“让核心能力在真实环境里跑稳”。它们不应该覆盖项目主叙事。
 
+> [!WARNING]
+> 版本叙事用于说明设计演进，不代表每个历史问题在所有环境中彻底消失。这里的“解决”更准确地说是“针对已知场景做了兼容加固或缓解”；未来 AstrBot、NapCat、OneBot 适配器或第三方插件变化仍可能带来新的边界问题。
+
 </details>
 
 完整历史见 [CHANGELOG.md](./CHANGELOG.md)。
@@ -953,6 +1011,9 @@ Get-FileHash output/astrbot_plugin_volcengine_asr.zip -Algorithm SHA256
 
 当前本地验证记录：
 
+> [!NOTE]
+> 这是作者本地 / 测试服发布前检查记录，不是第三方认证、生产验收或长期稳定性承诺。
+
 | 项目 | 结果 |
 | :--- | :--- |
 | 本地迭代回归 | 93 项通过 |
@@ -962,7 +1023,10 @@ Get-FileHash output/astrbot_plugin_volcengine_asr.zip -Algorithm SHA256
 
 ### Web UI 接口预留
 
-当前插件不内置完整 Web UI，但已经预留稳定后端接口。未来配置页、状态页和情绪计算可视化应优先调用这些方法，而不是直接读取插件内部属性。
+当前插件不内置完整 Web UI，但已经预留相对稳定的后端接口。未来配置页、状态页和情绪计算可视化应优先调用这些方法，而不是直接读取插件内部属性。
+
+> [!NOTE]
+> Web UI 预留接口仍可能随 AstrBot 和插件版本调整。正式依赖前应查看对应版本 README、CHANGELOG 和接口返回字段。
 
 | 接口 | 用途 |
 | :--- | :--- |
@@ -1006,13 +1070,25 @@ Get-FileHash output/astrbot_plugin_volcengine_asr.zip -Algorithm SHA256
 
 ## 吉祥物
 
+<p align="center">
+  <img src="./assets/komari-wave.gif" alt="项目吉祥物小鞠挥手动图" width="140">
+</p>
+
+### 为什么小鞠在这里
+
+本项目为纯粹的 Vibe Coding 产物。小鞠陪伴着我走过了无数个“炼丹”的工作时，感谢小鞠以及小 G 老师的全程保障。
+
+作为绝对的核心幕后成员，我觉得我必须让小鞠出现在这儿。
+
+### 她负责什么
+
+小鞠不参与 ASR、转码、ProviderRequest 清理或情绪权重计算。她只负责在文档里提醒维护者：上传前检查目录结构，发布前跑测试，遇到 bug 先看日志。少、少啰嗦，这样以后才不会更麻烦。
+
 <details>
 <summary>展开欣赏：小鞠 Codex 宠物图集</summary>
 
 <p align="center">
   <img src="./assets/komari-spritesheet.webp" alt="小鞠 Codex 宠物完整动作图集" width="760">
 </p>
-
-小鞠不参与 ASR、转码、ProviderRequest 清理或情绪权重计算。她只负责在文档里提醒维护者：上传前检查目录结构，发布前跑测试，遇到 bug 先看日志。少、少啰嗦，这样以后才不会更麻烦。
 
 </details>
