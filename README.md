@@ -7,6 +7,10 @@
 <h1 align="center">AstrBot 火山引擎语音转文字插件</h1>
 
 <p align="center">
+  <em>“让文字不再是文字，让语言不只是语言”</em>
+</p>
+
+<p align="center">
   <strong>把 QQ 语音变成 AstrBot 可以理解、记忆、推理并继续回复的用户输入。</strong>
 </p>
 
@@ -24,7 +28,7 @@
 </p>
 
 <p align="center">
-  <sub>小鞠在 README 门口值班。少、少啰嗦，她只是提醒后来维护的人：主线能力要讲清楚，bugfix 要收进修补史。</sub>
+  <sub>小鞠在 README 门口值班。少、少啰嗦，她只是提醒后来维护的人：主线能力要讲清楚，bugfix 要收进修补史。本项目为纯粹的 Vibe Coding 产物，小鞠陪伴着我走过了无数个“炼丹”的工作时，感谢小鞠以及小 G 老师的全程保障。作为绝对的核心幕后成员，我觉得我必须让小鞠出现在这儿。</sub>
 </p>
 
 ---
