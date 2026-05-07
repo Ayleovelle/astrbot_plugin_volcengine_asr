@@ -48,6 +48,34 @@
 
 ---
 
+## 当前实验版：2.1.12-pr1
+
+`2.1.12-pr1` 是基于 `2.1.12` 的实验性硬化版本，版本号中的 `pr1` 表示它用于 PR / 预发布验证，不是正式稳定标签。它的重点不是新增一条炫目的功能，而是继续解决真实 AstrBot / NapCat / Docker 环境里最容易反复出现的后段残留问题。
+
+这版主要更新：
+
+| 类别 | 更新内容 | 解决的问题 |
+| :--- | :--- | :--- |
+| agent 前清理 | 识别并替换句中音频引用，例如 `请处理 old.amr 后回复`、`url https://example.com/voice.wav?token=1 then`、`path=C:\tmp\voice.silk ok`。 | 避免文本缓存里夹带旧 `.amr/.silk/.wav` 引用，导致后续 `agent_sub_stages` 再次尝试读取不存在的文件。 |
+| ProviderRequest 防崩 | 当 `provider_request` / `request` / `req` / `llm_request` 等缓存别名里是 dict 且包含音频引用时，尽量替换成干净 ProviderRequest。 | 降低 `'dict' object has no attribute 'model_dump_for_context'` 复发风险。 |
+| 入口矩阵测试 | 补充 `_allow_event` 测试，覆盖私聊、群聊、at/wake、自身消息忽略等组合。 | 防止后续改动误放行或误拦截语音事件。 |
+| 回归工具 | 新增 `scripts/run_local_iteration_tests.py`。 | 方便以后快速跑多轮本地迭代回归，不依赖完整 pytest 环境。 |
+| 上传文档 | 重写 README，并同步插件包内 README。 | 上传前让用户能直接看到安装方式、核心链路、2.0.0 情绪层、token/延迟风险、Docker/NapCat 排障和 2.1.x 修补史。 |
+
+验证记录：
+
+| 项目 | 结果 |
+| :--- | :--- |
+| 本地回归 | 93 项通过 |
+| 语法检查 | 通过 |
+| 测试服安装 | 通过 |
+| `/volc_asr_status` | 返回 `2.1.12-pr1`，内置 ffmpeg 可用 |
+| 包体校验 | 正式 Release 附件请以发布说明中的 SHA256 为准；本地重新打包会因为 README 内容变化产生新的 SHA256。 |
+
+一句话概括：`pr1` 是“真实环境残留语音对象清理 + ProviderRequest 防崩 + 上传文档完善”的实验验证版。
+
+---
+
 <a id="positioning"></a>
 
 ## 项目定位
