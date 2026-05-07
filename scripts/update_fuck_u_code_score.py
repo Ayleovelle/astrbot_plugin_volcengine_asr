@@ -64,7 +64,7 @@ def build_svg(score: str) -> str:
 
   <rect x="0.5" y="0.5" width="249" height="53" rx="10" fill="#FFFFFF" stroke="#E0C9A6" stroke-width="1"/>
 
-  <text x="28" y="38" font-size="30" class="emoji" text-anchor="middle">💩</text>
+  <text x="28" y="38" font-size="30" class="emoji" text-anchor="middle">💬</text>
 
   <g fill="#5D4037" class="text-bold">
     <text x="53" y="21" font-size="9">CODE SMELL BY</text>
