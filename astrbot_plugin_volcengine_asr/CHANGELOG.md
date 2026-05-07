@@ -1,5 +1,22 @@
 # 更新说明
 
+## v2.2.0 - LivingMemory 适配正式版
+
+### 主要变更
+
+- 将 `2.1.12-pr2` 的 LivingMemory 适配实测结果整理为正式发布版，版本号推进到 `2.2.0`。
+- 识别成功后保护 `event.get_message_str()` 的返回值，避免 LivingMemory 或其它插件读取到旧的空文本、旧消息链或 `Record` 附件引用。
+- `ProviderRequest` 内容清理继续保留对象形态，只在确认存在音频引用时清理，降低 `'dict' object has no attribute 'model_dump_for_context'` 复发风险。
+- 延续 2.1.x 对 `event.extras`、`message_obj.extras`、`run_context`、缓存请求对象与音频引用的清理，减少旧 `.amr/.silk/.wav` 残留进入官方 agent 后段的概率。
+- README 从实验版叙事改为 `2.2.0` 正式版叙事，同时保留风险提示：部署差异、第三方插件缓存和未来 AstrBot 内部结构变化仍可能需要单独适配。
+
+### 验证
+
+- `python scripts/run_local_iteration_tests.py`
+- `python -m py_compile astrbot_plugin_volcengine_asr/main.py main.py tests/test_helpers.py tests/test_voice_workflow.py scripts/build_release_zip.py`
+- 本地回归：95 项通过。
+- 测试服 WebChat Record -> 火山 ASR -> LLM -> LivingMemory conversation 实测通过。
+
 ## v2.1.12 - 修复 AstrBot 上传安装包目录结构
 
 ### 主要变更
