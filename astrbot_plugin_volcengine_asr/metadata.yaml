@@ -2,7 +2,7 @@ name: astrbot_plugin_volcengine_asr
 display_name: 火山引擎语音转文字
 desc: 基于火山引擎大模型录音文件极速版识别，将 OneBot v11/NapCat QQ 语音转换为文字。
 short_desc: 将 QQ 语音自动识别为文字。
-version: "2.1.12-pr2"
+version: "2.2.0"
 author: AstrBot Plugin Contributor
 repo: "https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr"
 support_platforms:
