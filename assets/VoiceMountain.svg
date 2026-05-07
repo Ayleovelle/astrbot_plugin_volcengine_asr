@@ -1,66 +1,151 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
-  <title id="title">火山引擎语音转文字 AstrBot 插件</title>
-  <desc id="desc">简洁扁平化 README 头图，以火山、波浪线与抽象符号表现声音和文本边界被重新组织的意象。</desc>
+  <title id="title">VoiceMountain 火山引擎语音转文字 AstrBot 插件主视觉</title>
+  <desc id="desc">原创火山海岛风格主视觉，使用暖橙火山、青绿色海风、黑曜石工业面板和语音波形表现语音转文字链路。</desc>
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#FFF7ED"/>
-      <stop offset="1" stop-color="#FED7AA"/>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1A1E2A"/>
+      <stop offset="0.42" stop-color="#344154"/>
+      <stop offset="0.72" stop-color="#E16A46"/>
+      <stop offset="1" stop-color="#F7C978"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#54D6C5"/>
+      <stop offset="0.52" stop-color="#89E6D4"/>
+      <stop offset="1" stop-color="#F7D68B"/>
+    </linearGradient>
+    <linearGradient id="lava" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFF0A6"/>
+      <stop offset="0.42" stop-color="#F9734D"/>
+      <stop offset="1" stop-color="#A5242C"/>
+    </linearGradient>
+    <linearGradient id="emotionLine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#E87553"/>
+      <stop offset="1" stop-color="#F7A15D"/>
+    </linearGradient>
+    <linearGradient id="obsidian" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2A2F3B"/>
+      <stop offset="1" stop-color="#10131A"/>
     </linearGradient>
     <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#FFFBEB"/>
+      <stop offset="0" stop-color="#FFF7E8"/>
+      <stop offset="1" stop-color="#F2DEC0"/>
     </linearGradient>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0.96 0 1 0 0 0.43 0 0 1 0 0.22 0 0 0 0.45 0"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
+      <path d="M28 0H0V28" fill="none" stroke="#F8E7C8" stroke-width="1" opacity="0.12"/>
+    </pattern>
     <style>
-      .title { font: 900 56px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #3B1A0A; letter-spacing: 1px; }
-      .subtitle { font: 700 24px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #9A3412; }
-      .chip { font: 800 17px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #7C2D12; }
-      .chip-hot { font: 800 17px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #FFFFFF; }
-      .flow { font: 800 18px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #7C2D12; }
-      .note { font: 700 15px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #C2410C; }
+      .latin-title { font: 900 61px "Inter", "Arial", sans-serif; fill: #FFF8E8; }
+      .cn-title { font: 800 24px "Noto Sans SC", "Microsoft YaHei", sans-serif; fill: #FFE3B5; }
+      .label { font: 800 14px "Inter", "Arial", sans-serif; fill: #19202B; }
+      .chip { font: 800 15px "Inter", "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+      .tiny { font: 700 12px "Inter", "Arial", sans-serif; fill: #FBE7C6; }
+      .mono { font: 800 13px "Consolas", "JetBrains Mono", monospace; fill: #1B2330; }
     </style>
   </defs>
 
-  <rect width="1200" height="360" rx="32" fill="url(#bg)"/>
-  <circle cx="1074" cy="72" r="132" fill="#FB923C" opacity="0.14"/>
-  <circle cx="984" cy="296" r="96" fill="#F97316" opacity="0.10"/>
+  <rect width="1200" height="360" rx="30" fill="url(#sky)"/>
+  <rect width="1200" height="360" rx="30" fill="url(#grid)"/>
 
-  <g transform="translate(64 48)">
-    <rect width="252" height="252" rx="34" fill="url(#panel)" stroke="#FDBA74" stroke-width="2"/>
-    <circle cx="126" cy="126" r="86" fill="#FFEDD5"/>
-    <circle cx="126" cy="126" r="104" fill="none" stroke="#FB923C" stroke-width="3" stroke-dasharray="10 12" opacity="0.75"/>
+  <path d="M0 268 C145 218 239 301 374 248 C505 197 611 221 724 260 C862 308 980 280 1200 214 V360 H0 Z" fill="#111722" opacity="0.86"/>
+  <path d="M0 304 C176 266 284 333 431 284 C596 228 713 288 854 304 C1009 321 1119 280 1200 252 V360 H0 Z" fill="#0C1119" opacity="0.96"/>
+  <path d="M0 300 C120 275 209 286 320 303 C463 325 580 286 714 286 C842 286 918 326 1058 293 C1111 281 1156 263 1200 248 V360 H0 Z" fill="url(#sea)" opacity="0.92"/>
+  <path d="M0 318 C166 294 310 338 454 312 C610 284 737 318 884 323 C1007 327 1100 293 1200 278 V360 H0 Z" fill="#EDE2C8" opacity="0.36"/>
 
-    <path d="M58 172 L126 58 L194 172 Z" fill="#7C2D12"/>
-    <path d="M126 58 L153 105 L128 96 L101 108 Z" fill="#FFF7ED"/>
-    <path d="M94 172 L126 110 L160 172 Z" fill="#F97316"/>
-    <path d="M113 172 L126 134 L140 172 Z" fill="#FDE68A"/>
+  <g transform="translate(64 44)">
+    <path d="M20 0 H278 L314 36 V272 H36 L0 236 V20 Z" fill="#0E131D" stroke="#F6D08A" stroke-width="2.5"/>
+    <path d="M36 22 H256 L292 58 V250 H58 L22 214 V44 Z" fill="url(#panel)" opacity="0.97"/>
+    <path d="M58 238 H278 V250 H58 Z" fill="#111722" opacity="0.22"/>
+    <path d="M24 80 H0 M314 92 H286 M30 0 V28 M268 0 V30 M314 212 H286 M66 272 V246" stroke="#F6D08A" stroke-width="4" stroke-linecap="square"/>
 
-    <path d="M72 74 C52 54 56 34 84 26" fill="none" stroke="#7C2D12" stroke-width="8" stroke-linecap="round"/>
-    <path d="M180 74 C200 54 196 34 168 26" fill="none" stroke="#7C2D12" stroke-width="8" stroke-linecap="round"/>
-    <circle cx="126" cy="44" r="9" fill="#EF4444"/>
+    <circle cx="157" cy="134" r="96" fill="#18202C"/>
+    <circle cx="157" cy="134" r="83" fill="#263448"/>
+    <path d="M102 165 C121 124 134 104 145 88 H169 C181 104 196 126 214 165 Z" fill="#111721"/>
+    <path d="M113 165 C131 132 141 115 150 101 H164 C174 116 188 134 203 165 Z" fill="#202A38"/>
+    <ellipse cx="157" cy="96" rx="33" ry="10" fill="#FFF1C8"/>
+    <ellipse cx="157" cy="98" rx="24" ry="6" fill="#151C27"/>
+    <path d="M135 114 C145 106 169 106 180 114 L183 124 C166 118 148 118 132 124 Z" fill="#F7D291"/>
+    <path d="M134 166 L149 111 C153 117 162 117 166 111 L182 166 Z" fill="url(#lava)" filter="url(#softGlow)"/>
+    <path d="M150 166 L158 128 L168 166 Z" fill="#FFF3A4"/>
+    <path d="M124 88 C108 66 126 49 151 60" fill="none" stroke="#F7D291" stroke-width="7" stroke-linecap="round"/>
+    <path d="M190 88 C208 66 188 49 164 60" fill="none" stroke="#F7D291" stroke-width="7" stroke-linecap="round"/>
+    <path d="M145 72 C132 48 151 35 157 20 C164 37 184 49 169 72" fill="url(#lava)" filter="url(#softGlow)"/>
+    <circle cx="157" cy="62" r="7" fill="#FFF0A6"/>
+    <circle cx="131" cy="48" r="5" fill="#FB6B4B"/>
+    <circle cx="183" cy="49" r="5" fill="#FB6B4B"/>
+    <circle cx="157" cy="24" r="6" fill="#FB6B4B"/>
+    <path d="M82 168 C119 154 151 168 182 160 C202 155 221 160 241 168" fill="none" stroke="#7AE2D3" stroke-width="8" stroke-linecap="round"/>
+    <path d="M72 189 C111 178 145 191 182 183 C207 178 234 184 262 194" fill="none" stroke="#E87553" stroke-width="5" stroke-linecap="round" opacity="0.85"/>
 
-    <path d="M64 206 H188" stroke="#EA580C" stroke-width="9" stroke-linecap="round"/>
+    <rect x="65" y="218" width="184" height="26" rx="4" fill="#151C27"/>
+    <text x="157" y="236" text-anchor="middle" class="tiny">VOICE  /  ASR  /  TEXT</text>
   </g>
 
-  <g transform="translate(370 70)">
-    <text class="title" x="0" y="58">VoiceMountain</text>
-    <text class="subtitle" x="2" y="100">让文字不再是文字，让语言不再是语言</text>
+  <g transform="translate(420 66)">
+    <path d="M0 0 H612 L650 38 V196 H38 L0 158 Z" fill="#101621" opacity="0.68" stroke="#F7D291" stroke-width="2"/>
+    <path d="M26 24 H594 L624 54 V172 H56 L26 142 Z" fill="#101621" opacity="0.72"/>
+    <text class="latin-title" x="44" y="82">VoiceMountain</text>
+    <text class="cn-title" x="48" y="119">火山引擎语音转文字 · AstrBot 插件</text>
 
-    <g transform="translate(4 204)">
-      <text class="flow" x="0" y="42">Plain Text</text>
-      <g transform="translate(198 0)" fill="none" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M0 28 C24 4 48 4 72 28 S120 52 144 28 S192 4 216 28 S264 52 288 28 S336 4 360 28 S408 52 432 28" stroke="#EA580C" stroke-width="8" opacity="0.78"/>
-        <path d="M0 28 C24 4 48 4 72 28 S120 52 144 28 S192 4 216 28 S264 52 288 28 S336 4 360 28 S408 52 432 28" stroke="#FFF7ED" stroke-width="3" opacity="0.9"/>
-        <circle cx="0" cy="28" r="7" fill="#9A3412" stroke="none"/>
-        <circle cx="144" cy="28" r="7" fill="#F97316" stroke="none"/>
-        <circle cx="288" cy="28" r="7" fill="#F97316" stroke="none"/>
-        <circle cx="432" cy="28" r="7" fill="#9A3412" stroke="none"/>
+    <g transform="translate(48 146)">
+      <rect x="0" y="0" width="150" height="30" rx="4" fill="#F7D291"/>
+      <text class="chip" x="75" y="21" text-anchor="middle" fill="#1B2330">VOLCENGINE ASR</text>
+      <rect x="164" y="0" width="95" height="30" rx="4" fill="#7AE2D3"/>
+      <text class="chip" x="211.5" y="21" text-anchor="middle" fill="#102028">ASTRBOT</text>
+      <rect x="273" y="0" width="100" height="30" rx="4" fill="#E87553"/>
+      <text class="chip" x="323" y="21" text-anchor="middle" fill="#FFF7E8">ONEBOT</text>
+      <rect x="387" y="0" width="92" height="30" rx="4" fill="#242E3C" stroke="#F7D291" stroke-width="1.5"/>
+      <text class="chip" x="433" y="21" text-anchor="middle" fill="#F7D291">FFMPEG</text>
+    </g>
+
+    <g transform="translate(52 212)">
+      <rect x="0" y="0" width="540" height="58" rx="8" fill="#FDF1D6" opacity="0.97"/>
+      <g transform="translate(30 9)" stroke-linecap="round">
+        <path d="M0 24 V36 M14 16 V44 M28 10 V50 M42 16 V44 M56 24 V36" stroke="#151C27" stroke-width="7"/>
+        <path d="M0 49 C16 41 32 57 48 49 S80 41 96 49" fill="none" stroke="#7AE2D3" stroke-width="4"/>
       </g>
+      <path d="M146 30 H188" stroke="#151C27" stroke-width="4" stroke-linecap="round"/>
+      <path d="M183 23 L196 30 L183 37 Z" fill="#151C27"/>
+      <g transform="translate(216 9)" stroke-linecap="round">
+        <path d="M0 5 H84 M0 17 H110 M0 29 H68" stroke="#151C27" stroke-width="7"/>
+        <path d="M0 47 H112" stroke="#7AE2D3" stroke-width="4" stroke-dasharray="10 8"/>
+      </g>
+      <path d="M350 30 H392" stroke="#151C27" stroke-width="4" stroke-linecap="round"/>
+      <path d="M387 23 L400 30 L387 37 Z" fill="#151C27"/>
+      <path d="M420 30 C440 16 462 44 482 30 S524 16 544 30" fill="none" stroke="url(#emotionLine)" stroke-width="6" stroke-linecap="round" opacity="0.92"/>
+      <path d="M420 43 C440 35 462 51 482 43 S524 35 544 43" fill="none" stroke="#F7D291" stroke-width="3" stroke-linecap="round" opacity="0.72"/>
     </g>
   </g>
 
-  <g transform="translate(1016 188)" opacity="0.8">
-    <path d="M0 70 L44 0 L88 70 Z" fill="#FDBA74"/>
-    <path d="M38 70 L66 24 L94 70 Z" fill="#F97316"/>
-    <circle cx="44" cy="98" r="28" fill="none" stroke="#EA580C" stroke-width="4" stroke-dasharray="6 9"/>
+  <g transform="translate(1052 50)" opacity="0.92">
+    <path d="M0 18 H76 L110 52 V128 H34 L0 94 Z" fill="#FFF4DD" stroke="#F7D291" stroke-width="2"/>
+    <path d="M18 38 H73 M18 58 H92 M18 78 H72" stroke="#1B2330" stroke-width="4" stroke-linecap="square"/>
+    <circle cx="84" cy="98" r="15" fill="#E87553"/>
+    <path d="M77 98 H91 M84 91 V105" stroke="#FFF7E8" stroke-width="3"/>
   </g>
+
+  <g transform="translate(1030 228)">
+    <path d="M2 78 C20 42 31 26 39 14 H55 C65 27 78 45 94 78 Z" fill="#151C27"/>
+    <path d="M17 78 C29 52 38 38 43 28 H52 C58 39 69 54 82 78 Z" fill="#263448"/>
+    <ellipse cx="47" cy="22" rx="22" ry="7" fill="#F8E6C4"/>
+    <ellipse cx="47" cy="24" rx="15" ry="4" fill="#111721"/>
+    <path d="M31 78 L42 33 C45 37 50 37 53 33 L68 78 Z" fill="#E87553"/>
+    <path d="M42 78 L48 50 L56 78 Z" fill="#FFF0A6"/>
+    <path d="M37 4 C31 -10 43 -17 47 -28 C52 -17 65 -10 58 4" fill="url(#lava)" filter="url(#softGlow)"/>
+    <circle cx="47" cy="5" r="4" fill="#FFF0A6"/>
+    <circle cx="28" cy="8" r="4" fill="#FB6B4B"/>
+    <circle cx="68" cy="9" r="4" fill="#FB6B4B"/>
+    <path d="M-12 98 C22 82 56 106 100 88" fill="none" stroke="#7AE2D3" stroke-width="7" stroke-linecap="round"/>
+  </g>
+
+  <path d="M1122 328 H1162 M1142 308 V348" stroke="#F7D291" stroke-width="3" opacity="0.72"/>
+  <path d="M402 323 H527" stroke="#F7D291" stroke-width="3" opacity="0.52"/>
+  <path d="M526 323 L542 323" stroke="#7AE2D3" stroke-width="3" opacity="0.9"/>
 </svg>
