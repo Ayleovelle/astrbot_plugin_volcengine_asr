@@ -169,6 +169,25 @@ def _make_plugin(**config):
     return VolcengineAsrPlugin(None, merged)
 
 
+def test_allow_event_decision_matrix():
+    assert _make_plugin()._allow_event(_FakeEvent()) is True
+    assert _make_plugin(enable_private=False)._allow_event(_FakeEvent()) is False
+
+    group_event = _FakeEvent(group_id="group-1")
+    assert _make_plugin(enable_group=True)._allow_event(group_event) is True
+    assert _make_plugin(enable_group=False)._allow_event(group_event) is False
+
+    wake_event = _FakeEvent()
+    wake_event.is_at_or_wake_command = False
+    assert _make_plugin(only_when_at_or_wake=True)._allow_event(wake_event) is False
+    wake_event.is_at_or_wake_command = True
+    assert _make_plugin(only_when_at_or_wake=True)._allow_event(wake_event) is True
+
+    self_event = _FakeEvent(sender_id="bot", self_id="bot")
+    assert _make_plugin(ignore_self=True)._allow_event(self_event) is False
+    assert _make_plugin(ignore_self=False)._allow_event(self_event) is True
+
+
 def test_on_message_success_rebuilds_event_and_provider_request():
     record = Comp.Record(file="2f7e2f96f5d363c6311f8bacdaafea11.amr")
     event = _FakeEvent([record])
@@ -530,6 +549,62 @@ def test_agent_begin_cleanup_sanitizes_unknown_extra_cache_keys():
     assert event.message_obj.extras["plain_cache"] == {"files": ["report.txt"], "path": "/tmp/report.txt"}
 
 
+def test_agent_begin_cleanup_preserves_plain_message_when_sibling_audio_removed():
+    event = _FakeEvent()
+    event.message = []
+    event.message_chain = []
+    event.raw_message = []
+    event.message_obj.message = []
+    event.message_obj.message_chain = []
+    event.message_obj.raw_message = []
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "hello")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "hello[voice prompt]")
+    event.extras["agent_state"] = {
+        "message": "keep text",
+        "raw_message": "keep raw text",
+        "audio_urls": ["hidden.amr"],
+    }
+
+    _ensure_clean_voice_event_for_agent(event)
+
+    assert event.extras["agent_state"] == {
+        "message": "keep text",
+        "raw_message": "keep raw text",
+        "audio_urls": [],
+    }
+
+
+def test_agent_begin_cleanup_sanitizes_file_id_record_cache():
+    event = _FakeEvent()
+    event.message = []
+    event.message_chain = []
+    event.raw_message = []
+    event.message_obj.message = []
+    event.message_obj.message_chain = []
+    event.message_obj.raw_message = []
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "hello")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "hello[voice prompt]")
+    event.extras["agent_state"] = {
+        "record": "voice.amr",
+        "file_id": "napcat-record-id",
+        "file_ids": ["napcat-record-id"],
+        "file_name": "voice.amr",
+        "filename": "voice.silk",
+        "message": "keep text",
+    }
+
+    _ensure_clean_voice_event_for_agent(event)
+
+    assert event.extras["agent_state"] == {
+        "record": [],
+        "file_id": [],
+        "file_ids": [],
+        "file_name": [],
+        "filename": [],
+        "message": "keep text",
+    }
+
+
 def test_agent_begin_cleanup_sanitizes_run_context_caches():
     event = _FakeEvent()
     event.message = []
@@ -619,6 +694,85 @@ def test_agent_begin_cleanup_sanitizes_mapping_run_context_without_replacing_pro
     assert run_context["messages"] == [{"role": "user", "content": []}]
     assert run_context["stage_data"]["payload"]["message"][0].text == "hello"
     assert run_context["url"] == "https://example.com/page.html"
+
+
+def test_agent_begin_cleanup_replaces_inline_audio_references_in_text_caches():
+    event = _FakeEvent()
+    event.message = []
+    event.message_chain = []
+    event.raw_message = []
+    event.message_obj.message = []
+    event.message_obj.message_chain = []
+    event.message_obj.raw_message = []
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "hello")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "hello[voice prompt]")
+    event.extras["agent_state"] = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "请处理 old.amr 后回复"},
+                    {"type": "text", "text": "保留普通文字"},
+                ],
+            }
+        ],
+        "stage_data": {"payload": {"content": "url https://example.com/voice.wav?token=1 then"}},
+        "note": "请解释 amr 格式和 opus 格式的区别",
+    }
+    run_context = {
+        "context": [{"type": "text", "text": r"path=C:\tmp\voice.silk ok"}],
+    }
+
+    _ensure_clean_voice_event_for_agent(event, run_context)
+
+    assert event.extras["agent_state"]["messages"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "hello[voice prompt]"},
+                {"type": "text", "text": "保留普通文字"},
+            ],
+        }
+    ]
+    assert event.extras["agent_state"]["stage_data"] == {"payload": {"content": "hello[voice prompt]"}}
+    assert event.extras["agent_state"]["note"] == "请解释 amr 格式和 opus 格式的区别"
+    assert run_context["context"] == [{"type": "text", "text": "hello[voice prompt]"}]
+
+
+def test_agent_begin_cleanup_replaces_dict_provider_request_alias_with_clean_request():
+    event = _FakeEvent()
+    event.message = []
+    event.message_chain = []
+    event.raw_message = []
+    event.message_obj.message = []
+    event.message_obj.message_chain = []
+    event.message_obj.raw_message = []
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "hello")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "hello[voice prompt]")
+    event.extras["provider_request"] = {
+        "prompt": "请处理 old.amr 后回复",
+        "audio_urls": ["old.amr"],
+        "messages": [{"role": "user", "content": [{"type": "record", "data": {"file": "old.amr"}}]}],
+    }
+    run_context = {
+        "request": {
+            "prompt": "cached.amr",
+            "extra_user_content_parts": [{"type": "audio_url", "audio_url": "cached.amr"}],
+        }
+    }
+
+    _ensure_clean_voice_event_for_agent(event, run_context)
+
+    provider_request = event.extras["provider_request"]
+    cached_request = run_context["request"]
+    assert not isinstance(provider_request, dict)
+    assert not isinstance(cached_request, dict)
+    assert hasattr(provider_request, "prompt")
+    assert hasattr(cached_request, "prompt")
+    assert provider_request.prompt == "hello[voice prompt]"
+    assert cached_request.prompt == "hello[voice prompt]"
+    assert provider_request.audio_urls == []
+    assert cached_request.audio_urls == []
 
 
 def test_agent_begin_cleanup_preserves_plain_mapping_values():
@@ -741,6 +895,35 @@ def test_bare_onebot_amr_uses_get_record_then_ffmpeg():
     assert payload.detected_suffix == ".amr"
     assert payload.transcoded is True
     assert "data" in payload.payload
+
+
+def test_onebot_get_record_accepts_data_uri_base64_result():
+    audio_bytes = b"RIFFxxxxWAVEfmt "
+    event = _FakeEvent([])
+    plugin = _make_plugin()
+    result = {"data": {"base64": "data:audio/wav;base64," + base64.b64encode(audio_bytes).decode("ascii")}}
+
+    loaded = asyncio.run(plugin._load_onebot_record_result(result, "voice.amr"))
+
+    assert loaded == (audio_bytes, "base64://onebot_get_record", "onebot_get_record")
+
+
+def test_raise_if_content_too_large_ignores_invalid_or_equal_content_length():
+    plugin = _make_plugin(max_audio_mb=1)
+    response = type("Response", (), {"headers": {"content-length": "not-a-number"}})()
+
+    plugin._raise_if_content_too_large(response)
+
+    response.headers["content-length"] = str(plugin.max_audio_bytes)
+    plugin._raise_if_content_too_large(response)
+
+    response.headers["content-length"] = str(plugin.max_audio_bytes + 1)
+    try:
+        plugin._raise_if_content_too_large(response)
+    except UserVisibleError:
+        pass
+    else:
+        raise AssertionError("expected UserVisibleError")
 
 
 def test_build_audio_payload_reports_user_visible_audio_errors():
