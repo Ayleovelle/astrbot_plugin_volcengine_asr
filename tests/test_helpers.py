@@ -901,14 +901,16 @@ def test_sanitize_provider_request_replaces_prompt_containing_inline_audio_refer
 
 def test_sanitize_provider_request_removes_object_audio_parts():
     req = _FakeProviderRequest()
+    keep = _TextPart("保留对象文字")
     req.extra_user_content_parts = [
         _AudioPart("object-audio.amr"),
-        _TextPart("保留对象文字"),
+        keep,
     ]
 
     _sanitize_provider_request(req, "干净文本", "LLM 文本")
 
-    assert req.extra_user_content_parts == [{"type": "text", "text": "保留对象文字"}]
+    assert req.extra_user_content_parts == [keep]
+    assert keep.text == "保留对象文字"
 
 
 def test_sanitize_provider_request_tolerates_fragile_request_attributes():

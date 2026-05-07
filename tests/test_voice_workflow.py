@@ -53,6 +53,9 @@ class _FakeEvent:
     def get_messages(self):
         return self.message_obj.message
 
+    def get_message_str(self):
+        return self.message_str
+
     def stop_event(self):
         self.calls.append("stop_event")
         self.stopped += 1
@@ -111,6 +114,16 @@ class _ContextOnlyProviderRequest:
 
     def model_dump_for_context(self):
         return {"messages": self.messages}
+
+
+class _FakeContentPart:
+    type = "text"
+
+    def __init__(self, text):
+        self.text = text
+
+    def model_dump_for_context(self):
+        return {"type": self.type, "text": self.text}
 
 
 class _FakeRunContext:
@@ -210,6 +223,7 @@ def test_on_message_success_rebuilds_event_and_provider_request():
     assert event.calls == [("should_call_llm", True)]
     assert event.call_llm is True
     assert event.message_str == "hello"
+    assert event.get_message_str() == "hello"
     assert event.message_obj.message_str == "hello"
     assert event.message[0].text == "hello"
     assert event.message_obj.message[0].text == "hello"
@@ -231,6 +245,32 @@ def test_on_message_success_rebuilds_event_and_provider_request():
     assert req.files == []
     assert req.contexts == [{"role": "user", "content": [{"type": "text", "text": "context"}]}]
     assert req.extra_user_content_parts == [{"type": "text", "text": "keep"}]
+
+
+def test_on_message_success_overrides_stale_get_message_str_for_livingmemory():
+    record = Comp.Record(file="voice.amr")
+    event = _FakeEvent([record])
+    event._stale_message_str = ""
+
+    def stale_get_message_str():
+        return event._stale_message_str
+
+    event.get_message_str = stale_get_message_str
+    plugin = _make_plugin()
+
+    async def fake_recognize_voice_inputs(_voice_inputs):
+        return RecognitionBatch(results=[AsrResult(text="hello", request_id="req-1")], errors=[])
+
+    plugin._recognize_voice_inputs = fake_recognize_voice_inputs
+
+    outputs = asyncio.run(_collect_asyncgen(plugin.on_message(event)))
+
+    assert len(outputs) == 1
+    assert event.message_str == "hello"
+    assert event._stale_message_str == ""
+    assert event.get_message_str() == "hello"
+    event.message_str = ""
+    assert event.get_message_str() == "hello"
 
 
 def test_on_message_success_cleans_non_iterable_message_chain_object():
@@ -338,6 +378,25 @@ def test_apply_voice_prompt_template_takes_over_when_prompt_does_not_contain_mem
 
     assert req.prompt == "LLM text\n\nno target text"
     assert req.audio_urls == []
+    assert event.get_message_str() == "clean text"
+
+
+def test_apply_voice_prompt_template_preserves_content_part_objects():
+    plugin = _make_plugin()
+    event = _FakeEvent()
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "clean text")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "LLM text")
+    part = _FakeContentPart("[Audio Attachment: path old.amr]")
+    keep = _FakeContentPart("keep")
+    req = _FakeProviderRequest(prompt="clean text")
+    req.extra_user_content_parts = [part, keep]
+
+    asyncio.run(plugin.apply_voice_prompt_template(event, req))
+
+    assert req.extra_user_content_parts == [keep]
+    assert part.text == "[Audio Attachment: path old.amr]"
+    assert keep.text == "keep"
+    assert all(hasattr(item, "model_dump_for_context") for item in req.extra_user_content_parts)
 
 
 def test_apply_voice_prompt_template_skips_emotion_internal_call():

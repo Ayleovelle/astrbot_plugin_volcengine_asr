@@ -51,7 +51,7 @@ VOLC_FLASH_ENDPOINT = (
 VOLC_RESOURCE_ID = "volc.bigasr.auc_turbo"
 VOLC_SUCCESS_CODE = "20000000"
 VOLC_SILENT_AUDIO_CODE = "20000003"
-PLUGIN_VERSION = "2.1.12-pr1"
+PLUGIN_VERSION = "2.1.12-pr2"
 PLUGIN_REPO_URL = "https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr"
 SUPPORTED_AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".opus"}
 TRANSCODE_HINT_EXTS = {".amr", ".silk", ".slk", ".m4a", ".aac", ".flac", ".webm"}
@@ -760,10 +760,64 @@ def _mutate_message_chains_to_plain_text(event: AstrMessageEvent, text: str) -> 
             logger.warning(f"原地清理旧语音消息链切片失败，已尝试清理内部链：{exc}")
 
 
+def _ensure_event_get_message_str_returns_voice_text(event: AstrMessageEvent, text: str) -> None:
+    try:
+        setattr(event, "_volcengine_asr_message_text", text)
+    except Exception:
+        pass
+    try:
+        if getattr(event, "_volcengine_asr_get_message_str_guarded", False):
+            return
+    except Exception:
+        return
+
+    original_getter = getattr(event, "get_message_str", None)
+    if not callable(original_getter):
+        original_getter = None
+
+    def get_message_str() -> str:
+        get_extra = getattr(event, "get_extra", None)
+        if callable(get_extra):
+            for key in (ASR_EXTRA_MEMORY_TEXT, ASR_EXTRA_TEXT):
+                try:
+                    value = get_extra(key, "")
+                except Exception:
+                    value = ""
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+
+        message_obj = getattr(event, "message_obj", None)
+        candidates = (
+            getattr(event, "message_str", ""),
+            getattr(message_obj, "message_str", "") if message_obj is not None else "",
+            getattr(event, "_volcengine_asr_message_text", ""),
+        )
+        for value in candidates:
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+        if original_getter is not None:
+            try:
+                value = original_getter()
+            except Exception:
+                value = ""
+            if isinstance(value, str):
+                return value.strip()
+        return ""
+
+    try:
+        setattr(event, "_volcengine_asr_original_get_message_str", original_getter)
+        setattr(event, "get_message_str", get_message_str)
+        setattr(event, "_volcengine_asr_get_message_str_guarded", True)
+    except Exception as exc:
+        logger.debug(f"安装语音转写文本读取保护失败，已跳过：{exc}")
+
+
 def _replace_event_message_with_plain_text(event: AstrMessageEvent, text: str) -> None:
     chain = _plain_message_chain(text)
     _mutate_message_chains_to_plain_text(event, text)
     event.message_str = text
+    _ensure_event_get_message_str_returns_voice_text(event, text)
 
     for attr in ("message", "message_chain"):
         if hasattr(event, attr):
@@ -924,7 +978,26 @@ def _sanitize_content_parts(parts: Any, fallback_text: str, llm_text: str | None
     request_text = llm_text if isinstance(llm_text, str) and llm_text.strip() else fallback_text
     cleaned = []
     for part in parts:
-        sanitized = _sanitize_content_value(part, fallback_text, request_text)
+        part_dict = _object_to_sanitizable_dict(part)
+        if part_dict is not None:
+            if not _contains_sanitizable_voice_reference(part_dict):
+                cleaned.append(part)
+                continue
+            sanitized = _sanitize_content_value(part_dict, fallback_text, request_text)
+            if (
+                isinstance(sanitized, dict)
+                and _content_type(sanitized) == "text"
+                and hasattr(part, "text")
+                and "text" in sanitized
+            ):
+                try:
+                    setattr(part, "text", sanitized["text"])
+                    cleaned.append(part)
+                    continue
+                except Exception:
+                    pass
+        else:
+            sanitized = _sanitize_content_value(part, fallback_text, request_text)
         if sanitized is not None:
             cleaned.append(sanitized)
     return cleaned
