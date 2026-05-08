@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Current-2.2.0-brightgreen.svg" alt="Current 2.2.0">
+  <img src="https://img.shields.io/badge/Current-2.2.1-brightgreen.svg" alt="Current 2.2.1">
   <img src="https://img.shields.io/badge/Core-2.0.0%20Emotion%20Layer-ff69b4.svg" alt="Core 2.0.0 Emotion Layer">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/OneBot-v11-12B7F3.svg" alt="OneBot v11">
@@ -52,12 +52,12 @@
 
 ---
 
-## 当前正式版：2.2.0
+## 当前正式版：2.2.1
 
-`2.2.0` 是把 `2.1.12-pr2` 实测结果整理后的正式发布版。它不改变 2.0.0 建立的主线能力：QQ / NapCat 语音进入 AstrBot 后，仍然会被转写成干净文本，再进入 LLM、上下文、LivingMemory 与后续插件流程。
+`2.2.1` 是 `2.2.0` 正式版上的小版本 bugfix。它不改变 2.0.0 建立的主线能力：QQ / NapCat 语音进入 AstrBot 后，仍然会被转写成干净文本，再进入 LLM、上下文、LivingMemory 与后续插件流程。
 
 > [!WARNING]
-> `2.2.0` 已从实验版转为正式发布，但它仍然依赖 AstrBot、NapCat、OneBot、Docker 挂载路径、LLM provider 与第三方插件共同工作。下面的测试记录只代表作者当前测试条件，不构成生产环境稳定性承诺；因部署差异导致的识别失败、回复异常、额外 token 消耗、延迟增加或第三方服务费用变化，仍需由部署者自行评估和承担。
+> `2.2.1` 仍然依赖 AstrBot、NapCat、OneBot、Docker 挂载路径、LLM provider 与第三方插件共同工作。下面的测试记录只代表作者当前测试条件，不构成生产环境稳定性承诺；因部署差异导致的识别失败、回复异常、额外 token 消耗、延迟增加或第三方服务费用变化，仍需由部署者自行评估和承担。
 
 这版主要更新：
 
@@ -66,20 +66,20 @@
 | LivingMemory 适配 | 识别成功后保护 `event.get_message_str()` 的返回值，避免其它插件读取到旧的空文本或旧消息。 | 让 LivingMemory 等插件拿到 ASR 后的干净用户文本，而不是 `Record`、附件路径或空字符串。 |
 | ProviderRequest 防崩 | 保留 provider content part 对象形态，只在确认存在音频引用时清理。 | 降低 `'dict' object has no attribute 'model_dump_for_context'` 复发风险。 |
 | agent 前清理 | 延续 2.1.x 对 `event.extras`、`message_obj.extras`、`run_context`、缓存请求对象与音频引用的清理。 | 避免旧 `.amr/.silk/.wav` 残留进入 `agent_sub_stages`。 |
-| 正式化发布 | 将 `2.1.12-pr2` 的测试服结果升格为 `2.2.0` 正式版。 | 结束实验版本号，让后续维护以 `2.2.x` 为稳定分支继续演进。 |
+| LLM hook 兼容 | `apply_voice_prompt_template()` 兼容 AstrBot 只传 `event`、不传 `req` 的调用路径。 | 修复 `missing 1 required positional argument: 'req'`，避免 LLM 请求阶段直接中断。 |
 
 验证记录：
 
 | 项目 | 结果 |
 | :--- | :--- |
-| 本地回归 | 95 项通过 |
+| 本地回归 | 98 项通过 |
 | 语法检查 | 通过 |
 | 测试服安装 | 通过 |
 | LivingMemory 适配 | WebChat Record -> 火山 ASR -> LLM -> LivingMemory conversation 实测通过 |
-| `/volc_asr_status` | 返回 `2.2.0`，内置 ffmpeg 可用 |
+| `/volc_asr_status` | 返回 `2.2.1`，内置 ffmpeg 可用 |
 | 包体校验 | 正式 Release 附件请以发布说明中的 SHA256 为准；本地重新打包会因为 README 内容变化产生新的 SHA256。 |
 
-一句话概括：`2.2.0` 是“2.0.0 主线能力 + 2.1.x 真实环境加固 + LivingMemory 适配实测”的正式版。
+一句话概括：`2.2.1` 是“2.2.0 正式主线 + on_llm_request 参数兼容修复”的稳定小版本。
 
 > [!NOTE]
 > `agent 前清理` 和 `ProviderRequest 防崩` 是针对已知 AstrBot / NapCat / 插件缓存形态的兼容加固，用于降低问题复发概率，不保证覆盖所有自定义缓存、第三方插件写入方式或未来 AstrBot 内部结构变化。
@@ -239,7 +239,7 @@ enable_emotion_analysis = false
 
 | 状态项 | 期望值 |
 | :--- | :--- |
-| 版本 | 当前上传版本，例如 `2.2.0` |
+| 版本 | 当前上传版本，例如 `2.2.1` |
 | 鉴权 | 已配置 |
 | 提交方式 | Base64 上传 |
 | 处理方式 | 注入为用户输入 |
@@ -804,7 +804,7 @@ docker logs --tail=500 astrbot 2>&1 | grep -E 'preprocess_stage|agent_sub_stages
 
 先确认：
 
-1. 插件版本至少为 `2.2.0`。
+1. 插件版本至少为 `2.2.1`。
 2. 安装的是 Release 附件，不是旧 zip。
 3. 已重启 AstrBot。
 4. `/volc_asr_status` 显示版本正确。
@@ -1018,7 +1018,7 @@ Get-FileHash output/astrbot_plugin_volcengine_asr.zip -Algorithm SHA256
 | 本地迭代回归 | 95 项通过 |
 | 测试服安装 | 成功 |
 | 失败插件列表 | 空 |
-| `/volc_asr_status` | 返回 `2.2.0`，内置 ffmpeg 可用 |
+| `/volc_asr_status` | 返回 `2.2.1`，内置 ffmpeg 可用 |
 
 ### Web UI 接口预留
 

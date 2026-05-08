@@ -51,7 +51,7 @@ VOLC_FLASH_ENDPOINT = (
 VOLC_RESOURCE_ID = "volc.bigasr.auc_turbo"
 VOLC_SUCCESS_CODE = "20000000"
 VOLC_SILENT_AUDIO_CODE = "20000003"
-PLUGIN_VERSION = "2.2.0"
+PLUGIN_VERSION = "2.2.1"
 PLUGIN_REPO_URL = "https://github.com/Ayleovelle/astrbot_plugin_volcengine_asr"
 SUPPORTED_AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".opus"}
 TRANSCODE_HINT_EXTS = {".amr", ".silk", ".slk", ".m4a", ".aac", ".flac", ".webm"}
@@ -1191,6 +1191,38 @@ def _set_clean_provider_request(event: AstrMessageEvent, prompt: str) -> None:
         event.set_extra("provider_request", req)
 
 
+def _get_event_provider_request(event: AstrMessageEvent) -> Any | None:
+    for key in ("provider_request", "request", "req", "llm_request"):
+        try:
+            value = event.get_extra(key, None)
+        except Exception:
+            continue
+        if _looks_like_provider_request(value):
+            return value
+    return None
+
+
+def _resolve_provider_request_argument(
+    event: AstrMessageEvent,
+    req: Any | None = None,
+    args: tuple[Any, ...] = (),
+    kwargs: dict[str, Any] | None = None,
+) -> Any | None:
+    if _looks_like_provider_request(req):
+        return req
+    for value in args:
+        if _looks_like_provider_request(value):
+            return value
+    for key in ("req", "request", "provider_request", "llm_request"):
+        value = (kwargs or {}).get(key)
+        if _looks_like_provider_request(value):
+            return value
+    for value in (kwargs or {}).values():
+        if _looks_like_provider_request(value):
+            return value
+    return _get_event_provider_request(event)
+
+
 def _ensure_clean_voice_event_for_agent(event: AstrMessageEvent, run_context: Any | None = None) -> None:
     memory_text = event.get_extra(ASR_EXTRA_MEMORY_TEXT, "")
     llm_text = event.get_extra(ASR_EXTRA_LLM_TEXT, "")
@@ -1200,7 +1232,7 @@ def _ensure_clean_voice_event_for_agent(event: AstrMessageEvent, run_context: An
     llm_text = llm_text.strip() if isinstance(llm_text, str) and llm_text.strip() else memory_text
     _replace_event_message_with_plain_text(event, memory_text)
     _sanitize_event_cached_content(event, memory_text, llm_text)
-    req = event.get_extra("provider_request", None)
+    req = _get_event_provider_request(event)
     if _looks_like_provider_request(req):
         _sanitize_provider_request(req, memory_text, llm_text)
     _sanitize_run_context_cached_content(run_context, memory_text, llm_text)
@@ -2091,7 +2123,9 @@ class VolcengineAsrPlugin(Star):
     async def apply_voice_prompt_template(
         self,
         event: AstrMessageEvent,
-        req: ProviderRequest,
+        req: ProviderRequest | None = None,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
         """在 livingmemory 处理完干净文本后，再把 LLM prompt 替换为语音模板。"""
         if event.get_extra(ASR_EXTRA_EMOTION_INTERNAL_CALL, False):
@@ -2107,10 +2141,16 @@ class VolcengineAsrPlugin(Star):
         if not memory_text or not llm_text:
             return
         _replace_event_message_with_plain_text(event, memory_text)
-        _sanitize_event_cached_content(event, memory_text)
-        _sanitize_provider_request(req, memory_text, llm_text)
+        _sanitize_event_cached_content(event, memory_text, llm_text)
 
-        prompt = getattr(req, "prompt", "")
+        provider_request = _resolve_provider_request_argument(event, req, args, kwargs)
+        if not _looks_like_provider_request(provider_request):
+            _ensure_clean_voice_event_for_agent(event)
+            return
+
+        _sanitize_provider_request(provider_request, memory_text, llm_text)
+
+        prompt = getattr(provider_request, "prompt", "")
         if not isinstance(prompt, str):
             prompt = ""
 
@@ -2122,7 +2162,7 @@ class VolcengineAsrPlugin(Star):
                 f"memory_text={memory_text}, prompt={prompt[:120]}"
             )
 
-        req.prompt = new_prompt
+        provider_request.prompt = new_prompt
         event.set_extra("volcengine_asr_llm_prompt_applied", True)
         logger.info("已在 LLM 请求阶段应用语音提示词模板，长期记忆仍保留干净转写文本。")
 

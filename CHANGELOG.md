@@ -1,5 +1,20 @@
 # 更新说明
 
+## v2.2.1 - 修复 on_llm_request 缺失 req 参数
+
+### 主要变更
+
+- 修复 AstrBot v4.24.2 在部分 `on_llm_request` 调用路径中只传入 `event`，导致 `VolcengineAsrPlugin.apply_voice_prompt_template()` 因缺少 `req` 参数直接抛出 `TypeError` 的问题。
+- `apply_voice_prompt_template()` 现在兼容 `req=None`、位置参数、关键字参数，以及 `event.extras` 中的 `provider_request` / `request` / `req` / `llm_request` 别名。
+- 当找不到可用 `ProviderRequest` 对象时，插件只做事件与缓存清理，不会误标 `volcengine_asr_llm_prompt_applied`，也不会把普通 `dict` 当成 AstrBot provider request 继续传递。
+- 本版本只修复 LLM hook 参数兼容问题，不改变 2.2.0 的 ASR、ffmpeg、LivingMemory、agent 前清理与情绪判断主流程。
+
+### 验证
+
+- `py -3 -m pytest tests\test_helpers.py tests\test_voice_workflow.py -q`
+- `py -3 -m py_compile astrbot_plugin_volcengine_asr\main.py tests\test_voice_workflow.py scripts\build_release_zip.py`
+- `py -3 scripts\build_release_zip.py`
+
 ## v2.2.0 - LivingMemory 适配正式版
 
 ### 主要变更

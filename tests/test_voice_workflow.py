@@ -381,6 +381,47 @@ def test_apply_voice_prompt_template_takes_over_when_prompt_does_not_contain_mem
     assert event.get_message_str() == "clean text"
 
 
+def test_apply_voice_prompt_template_tolerates_missing_provider_request():
+    plugin = _make_plugin()
+    event = _FakeEvent()
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "clean text")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "LLM text")
+
+    asyncio.run(plugin.apply_voice_prompt_template(event))
+
+    assert event.get_message_str() == "clean text"
+    assert event.get_extra("volcengine_asr_llm_prompt_applied", False) is False
+
+
+def test_apply_voice_prompt_template_uses_provider_request_extra_when_req_missing():
+    plugin = _make_plugin()
+    event = _FakeEvent()
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "clean text")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "LLM text")
+    req = _FakeProviderRequest(prompt="clean text")
+    event.set_extra("provider_request", req)
+
+    asyncio.run(plugin.apply_voice_prompt_template(event))
+
+    assert req.prompt == "LLM text"
+    assert req.audio_urls == []
+    assert req.files == []
+    assert event.get_extra("volcengine_asr_llm_prompt_applied") is True
+
+
+def test_apply_voice_prompt_template_uses_keyword_provider_request():
+    plugin = _make_plugin()
+    event = _FakeEvent()
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "clean text")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "LLM text")
+    req = _FakeProviderRequest(prompt="wrap clean text end")
+
+    asyncio.run(plugin.apply_voice_prompt_template(event, provider_request=req))
+
+    assert req.prompt == "wrap LLM text end"
+    assert req.audio_urls == []
+
+
 def test_apply_voice_prompt_template_preserves_content_part_objects():
     plugin = _make_plugin()
     event = _FakeEvent()
