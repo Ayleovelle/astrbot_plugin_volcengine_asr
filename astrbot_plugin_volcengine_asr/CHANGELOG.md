@@ -1,6 +1,6 @@
 # 更新说明
 
-## v2.2.1 - 修复 on_llm_request 缺失 req 参数
+## v2.2.2 - 修复 on_llm_request 缺失 req 参数
 
 ### 主要变更
 
