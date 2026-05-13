@@ -232,6 +232,7 @@ def test_on_message_success_rebuilds_event_and_provider_request():
     assert event.get_extra(ASR_EXTRA_LLM_TEXT) == "hello[voice prompt]"
     assert event.get_extra(ASR_EXTRA_INJECTED) is True
     assert event.get_extra(ASR_EXTRA_DIAGNOSTICS)[0]["source_type"] == "record_converter"
+    assert event.get_extra("volcengine_asr_token_risk")["level"] == "low"
 
     provider_request = event.get_extra("provider_request")
     assert provider_request.prompt == "hello[voice prompt]"
@@ -245,6 +246,32 @@ def test_on_message_success_rebuilds_event_and_provider_request():
     assert req.files == []
     assert req.contexts == [{"role": "user", "content": [{"type": "text", "text": "context"}]}]
     assert req.extra_user_content_parts == [{"type": "text", "text": "keep"}]
+
+
+def test_on_message_token_guard_compacts_extreme_voice_prompt():
+    record = Comp.Record(file="voice.amr")
+    event = _FakeEvent([record])
+    plugin = _make_plugin(
+        voice_prompt_template="{text}" + (" 超长提示" * 200),
+        token_risk_medium_tokens=20,
+        token_risk_high_tokens=40,
+        token_risk_critical_tokens=60,
+    )
+
+    async def fake_recognize_voice_inputs(_voice_inputs):
+        return RecognitionBatch(results=[AsrResult(text="hello", request_id="req-1")], errors=[])
+
+    plugin._recognize_voice_inputs = fake_recognize_voice_inputs
+
+    outputs = asyncio.run(_collect_asyncgen(plugin.on_message(event)))
+
+    assert len(outputs) == 1
+    risk = event.get_extra("volcengine_asr_token_risk")
+    assert risk["level"] == "critical"
+    assert risk["action"] == "skip_llm_injection"
+    assert risk["final_prompt_tokens"] <= risk["estimated_prompt_tokens"]
+    assert event.get_extra(ASR_EXTRA_LLM_TEXT) == "hello"
+    assert outputs[0].prompt == "hello"
 
 
 def test_on_message_success_overrides_stale_get_message_str_for_livingmemory():
@@ -332,6 +359,8 @@ def test_on_message_cleans_record_before_emotion_llm_call():
     assert event.get_extra(ASR_EXTRA_EMOTION_RESULT)["label"] == "anxious"
     assert "anxious" in event.get_extra(ASR_EXTRA_LLM_TEXT)
     assert event.get_extra("provider_request").prompt == event.get_extra(ASR_EXTRA_LLM_TEXT)
+    assert plugin.get_webui_emotion_cloud()["count"] == 1
+    assert plugin.get_webui_emotion_cloud()["records"][0]["label"] == "anxious"
 
 
 def test_on_message_uses_plugin_emotion_weighting_policy():
@@ -379,6 +408,47 @@ def test_apply_voice_prompt_template_takes_over_when_prompt_does_not_contain_mem
     assert req.prompt == "LLM text\n\nno target text"
     assert req.audio_urls == []
     assert event.get_message_str() == "clean text"
+
+
+def test_apply_voice_prompt_template_tolerates_missing_provider_request():
+    plugin = _make_plugin()
+    event = _FakeEvent()
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "clean text")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "LLM text")
+
+    asyncio.run(plugin.apply_voice_prompt_template(event))
+
+    assert event.get_message_str() == "clean text"
+    assert event.get_extra("volcengine_asr_llm_prompt_applied", False) is False
+
+
+def test_apply_voice_prompt_template_uses_provider_request_extra_when_req_missing():
+    plugin = _make_plugin()
+    event = _FakeEvent()
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "clean text")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "LLM text")
+    req = _FakeProviderRequest(prompt="clean text")
+    event.set_extra("provider_request", req)
+
+    asyncio.run(plugin.apply_voice_prompt_template(event))
+
+    assert req.prompt == "LLM text"
+    assert req.audio_urls == []
+    assert req.files == []
+    assert event.get_extra("volcengine_asr_llm_prompt_applied") is True
+
+
+def test_apply_voice_prompt_template_uses_keyword_provider_request():
+    plugin = _make_plugin()
+    event = _FakeEvent()
+    event.set_extra(ASR_EXTRA_MEMORY_TEXT, "clean text")
+    event.set_extra(ASR_EXTRA_LLM_TEXT, "LLM text")
+    req = _FakeProviderRequest(prompt="wrap clean text end")
+
+    asyncio.run(plugin.apply_voice_prompt_template(event, provider_request=req))
+
+    assert req.prompt == "wrap LLM text end"
+    assert req.audio_urls == []
 
 
 def test_apply_voice_prompt_template_preserves_content_part_objects():

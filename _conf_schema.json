@@ -63,13 +63,13 @@
     "description": "优先使用插件内置 ffmpeg",
     "type": "bool",
     "default": true,
-    "hint": "Linux x86_64 Docker 环境建议保持开启，不需要在 VPS 或容器里手动安装 ffmpeg。"
+    "hint": "Linux x86_64 Docker 环境建议保持开启。若系统从未安装 ffmpeg，请务必使用 Release 附件包体安装，源码 zip 可能没有内置 ffmpeg。"
   },
   "ffmpeg_path": {
     "description": "ffmpeg 可执行文件路径",
     "type": "string",
     "default": "auto",
-    "hint": "默认 auto 会优先使用插件内置 Linux x86_64 ffmpeg；特殊环境可填写绝对路径。"
+    "hint": "默认 auto 会自动尝试环境变量、插件目录内 ffmpeg、imageio-ffmpeg、PATH 和常见系统路径；特殊环境可填写绝对路径。"
   },
   "transcode_output_format": {
     "description": "转码输出格式",
@@ -138,6 +138,12 @@
     "default": 4,
     "hint": "后续 Web UI 和 AstrBot 上下文 API 可用时使用。0 表示只分析当前语音转写文本。"
   },
+  "emotion_context_char_limit": {
+    "description": "情绪判断上下文字符上限",
+    "type": "int",
+    "default": 2000,
+    "hint": "用于限制进入情绪判断 LLM 的上下文长度。0 表示不带上下文。"
+  },
   "emotion_max_respect_weight_percent": {
     "description": "情绪判断最大参考权重百分比",
     "type": "int",
@@ -154,6 +160,36 @@
     "type": "bool",
     "default": true,
     "hint": "开启后，情绪判断 LLM 调用失败或输出无法解析时，会继续按普通语音转写流程处理，不影响主 LLM 回复。"
+  },
+  "enable_token_risk_guard": {
+    "description": "启用 Token 风险保护",
+    "type": "bool",
+    "default": true,
+    "hint": "建议保持开启。插件会估算语音提示词和情绪提示词带来的 token 风险，超阈值时自动压缩或跳过 LLM 注入，避免上游空回复和高额消耗。"
+  },
+  "token_risk_medium_tokens": {
+    "description": "Token 中风险阈值",
+    "type": "int",
+    "default": 8000,
+    "hint": "达到该阈值后会压缩情绪辅助信息。"
+  },
+  "token_risk_high_tokens": {
+    "description": "Token 高风险阈值",
+    "type": "int",
+    "default": 24000,
+    "hint": "达到该阈值后会使用压缩语音提示。"
+  },
+  "token_risk_critical_tokens": {
+    "description": "Token 极高风险阈值",
+    "type": "int",
+    "default": 64000,
+    "hint": "达到该阈值后会跳过 LLM 注入，只保留干净转写文本，避免类似数十万 token 请求导致模型空输出。"
+  },
+  "webui_emotion_history_limit": {
+    "description": "Web UI 情绪缓存数量",
+    "type": "int",
+    "default": 160,
+    "hint": "用于情绪云图可视化的最近记录数量。允许 100-200；只保存在内存中，重启插件后清空。"
   },
   "emotion_prompt_template": {
     "description": "情绪判断提示词模板",

@@ -12,11 +12,15 @@ from astrbot_plugin_volcengine_asr.main import (
     ASR_EXTRA_UNCLEAR,
     AsrResult,
     DEFAULT_EMOTION_PROMPT_TEMPLATE,
+    EmotionHistoryRecord,
+    DefaultEmotionEngine,
     EmotionWeightingInput,
     EmotionJudgement,
+    PLUGIN_NAME,
     UserVisibleError,
     VolcengineAsrPlugin,
     _append_emotion_guidance,
+    _append_compact_emotion_guidance,
     _build_emotion_judgement,
     _build_emotion_prompt,
     _config_bool,
@@ -25,9 +29,11 @@ from astrbot_plugin_volcengine_asr.main import (
     _coerce_webui_config_value,
     _detect_audio_suffix,
     _entropy_certainty,
+    _estimate_text_tokens,
     _estimate_base64_size,
     _extract_record_sources,
     _normalize_emotion_weights,
+    _build_ffmpeg_candidates,
     _parse_ffmpeg_version_output,
     _probe_ffmpeg_startup,
     _resolve_ffmpeg_path,
@@ -290,9 +296,33 @@ def test_resolve_ffmpeg_path_falls_back_after_failed_candidates():
         path, source, error = _resolve_ffmpeg_path("auto", prefer_bundled=False)
 
     assert path == "ffmpeg"
-    assert source == "PATH (7.0)"
+    assert source == "PATH 命令 (7.0)"
     assert error == ""
     assert calls == ["ffmpeg"]
+
+
+def test_build_ffmpeg_candidates_discovers_env_path_and_common_paths():
+    env = {
+        "ASTRBOT_VOLC_ASR_FFMPEG": "/opt/custom/ffmpeg",
+        "PATH": "",
+    }
+
+    def fake_which(name):
+        return "/usr/local/bin/ffmpeg" if name == "ffmpeg" else None
+
+    with _patched_attr(plugin_main.os, "environ", env), _patched_attr(plugin_main.shutil, "which", fake_which):
+        candidates = _build_ffmpeg_candidates("auto", prefer_bundled=False)
+
+    assert candidates[0] == ("/opt/custom/ffmpeg", "环境变量 ASTRBOT_VOLC_ASR_FFMPEG")
+    assert ("/usr/local/bin/ffmpeg", "PATH 解析") in candidates
+    assert ("ffmpeg", "PATH 命令") in candidates
+    assert any(source == "常见路径" for _, source in candidates)
+
+
+def test_build_ffmpeg_candidates_keeps_explicit_path_exclusive():
+    candidates = _build_ffmpeg_candidates("/custom/bin/ffmpeg", prefer_bundled=True)
+
+    assert candidates == [("/custom/bin/ffmpeg", "配置路径")]
 
 
 def test_resolve_ffmpeg_path_keeps_diagnostic_when_all_candidates_fail():
@@ -315,6 +345,13 @@ def test_estimate_base64_size_handles_padding():
     assert _estimate_base64_size("base64://TWFu") == 3
     assert _estimate_base64_size("data:audio/wav;base64,TW Fu\n") == 3
     assert _estimate_base64_size("") == 0
+
+
+def test_estimate_text_tokens_handles_mixed_text_without_external_tokenizer():
+    assert _estimate_text_tokens("") == 0
+    assert _estimate_text_tokens("hello world") >= 2
+    assert _estimate_text_tokens("你好世界") == 4
+    assert _estimate_text_tokens("hello 你好") >= 4
 
 
 def test_extract_record_sources_supports_object_dict_and_nested_data():
@@ -687,6 +724,33 @@ def test_build_emotion_judgement_accepts_weighting_policy():
     assert judgement.respect_weight == 0.3
 
 
+def test_default_emotion_engine_exposes_replaceable_prompt_and_scoring_interfaces():
+    engine = DefaultEmotionEngine()
+    prompt = engine.prompt_builder.build_prompt(
+        DEFAULT_EMOTION_PROMPT_TEMPLATE,
+        transcription_text="我有点担心",
+        context_text="",
+    )
+    judgement = engine.scorer.build_judgement(
+        {
+            "label": "anxious",
+            "emotion_weights": {"anxious": 1.0},
+            "confidence": 0.8,
+            "valence": -0.3,
+            "arousal": 0.7,
+            "voice_text_support": 0.9,
+            "context_support": 0.1,
+        },
+        transcript_chars=5,
+        max_respect_weight=0.6,
+    )
+
+    assert "我有点担心" in prompt
+    assert judgement.label == "anxious"
+    assert judgement.valence == -0.3
+    assert judgement.arousal == 0.7
+
+
 def test_masked_secret_helpers_preserve_existing_secret_placeholders():
     assert _mask_secret("") == ""
     assert _mask_secret("short") == "****"
@@ -781,6 +845,26 @@ def test_append_emotion_guidance_only_changes_llm_text():
     assert "情绪判断辅助信息" in result
     assert "建议参考权重：0.40" in result
     assert _append_emotion_guidance("原始 LLM 文本", None) == "原始 LLM 文本"
+
+
+def test_compact_emotion_guidance_is_short_and_non_diagnostic():
+    judgement = EmotionJudgement(
+        label="anxious",
+        emotion_weights={"anxious": 1.0},
+        confidence=0.7,
+        respect_weight=0.4,
+        valence=-0.3,
+        arousal=0.6,
+        voice_text_support=0.8,
+        context_support=0.2,
+    )
+
+    result = _append_compact_emotion_guidance("原始 LLM 文本", judgement)
+
+    assert result.startswith("原始 LLM 文本")
+    assert "焦虑" in result
+    assert "不要当作事实或诊断" in result
+    assert len(result) < 120
 
 
 def test_build_result_values_reuses_transcription_formatting():
@@ -968,9 +1052,14 @@ def test_webui_snapshot_exposes_stable_state_schema_and_config_values():
     assert state["emotion"]["enabled"] is True
     assert state["emotion"]["model_id"] == "emotion-provider"
     assert state["emotion"]["max_respect_weight_percent"] == 40
+    assert state["emotion"]["history_limit"] == 160
+    assert state["emotion"]["context_char_limit"] == 2000
+    assert state["token_risk"]["enabled"] is True
     assert "api_key" in schema
     assert snapshot["api_key"] == "****"
     assert "access_key" in snapshot
+    assert snapshot["webui_emotion_history_limit"] == 160
+    assert snapshot["enable_token_risk_guard"] is True
 
 
 def test_webui_update_skips_unchanged_masked_secret_and_reloads_runtime_values():
@@ -1013,6 +1102,7 @@ def test_webui_update_validates_type_options_and_ranges():
             "max_audio_mb": "abc",
             "enable_group": 1,
             "emotion_max_respect_weight_percent": 101,
+            "webui_emotion_history_limit": 99,
             "unknown_key": "value",
         }
     )
@@ -1021,9 +1111,130 @@ def test_webui_update_validates_type_options_and_ranges():
     assert "max_audio_mb" in result["errors"]
     assert "enable_group" in result["errors"]
     assert "emotion_max_respect_weight_percent" in result["errors"]
+    assert "webui_emotion_history_limit" in result["errors"]
     assert result["skipped"]["unknown_key"] == "未知配置项"
     assert result["applied"] == {}
     assert plugin.submit_mode == "base64"
+
+
+def test_webui_registers_official_plugin_page_apis():
+    class _Context:
+        def __init__(self):
+            self.registered_web_apis = []
+
+        def register_web_api(self, route, handler, methods, desc):
+            self.registered_web_apis.append((route, handler, methods, desc))
+
+    context = _Context()
+    plugin = VolcengineAsrPlugin(context, {"api_key": "token"})
+
+    routes = {(route, tuple(methods)) for route, _, methods, _ in context.registered_web_apis}
+
+    assert (f"/{PLUGIN_NAME}/state", ("GET",)) in routes
+    assert (f"/{PLUGIN_NAME}/doctor", ("GET",)) in routes
+    assert (f"/{PLUGIN_NAME}/config", ("GET",)) in routes
+    assert (f"/{PLUGIN_NAME}/config", ("POST",)) in routes
+    assert (f"/{PLUGIN_NAME}/emotions", ("GET",)) in routes
+    assert (f"/{PLUGIN_NAME}/emotions/clear", ("POST",)) in routes
+    assert plugin.get_webui_state()["emotion"]["history_count"] == 0
+
+
+def test_health_report_flags_auth_ffmpeg_mode_and_token_guard():
+    plugin = VolcengineAsrPlugin(
+        None,
+        {
+            "api_key": "",
+            "app_key": "",
+            "access_key": "",
+            "enable_transcode": True,
+            "inject_as_user_input": False,
+            "reply_transcription": True,
+            "enable_token_risk_guard": False,
+        },
+    )
+    plugin.ffmpeg_error = "ffmpeg missing"
+
+    report = plugin.get_health_report()
+    checks = {check["key"]: check for check in report["checks"]}
+
+    assert report["summary"]["level"] == "error"
+    assert checks["auth"]["level"] == "error"
+    assert checks["ffmpeg"]["level"] == "error"
+    assert checks["mode"]["level"] == "warn"
+    assert checks["token_risk_guard"]["level"] == "warn"
+
+
+def test_webui_register_failure_does_not_break_plugin_load():
+    class _Context:
+        def register_web_api(self, route, handler, methods, desc):
+            raise RuntimeError("route registry is unavailable")
+
+    plugin = VolcengineAsrPlugin(_Context(), {"api_key": "token"})
+
+    assert plugin.get_webui_state()["version"]
+    assert plugin.auto_recognize is True
+
+
+def test_webui_emotion_cloud_keeps_recent_records_with_limit():
+    plugin = VolcengineAsrPlugin(None, {"api_key": "token", "webui_emotion_history_limit": 100})
+
+    for index in range(105):
+        plugin._emotion_history.append(
+            EmotionHistoryRecord(
+                id=f"record-{index}",
+                timestamp="2026-05-08T00:00:00Z",
+                label="happy" if index % 2 else "neutral",
+                emotion_weights={"happy": 1.0} if index % 2 else {"neutral": 1.0},
+                confidence=0.6,
+                respect_weight=0.3,
+                valence=0.2,
+                arousal=0.5,
+                voice_text_support=0.7,
+                context_support=0.1,
+                reason="sample",
+                text_preview=f"text {index}",
+                text_length=6,
+            )
+        )
+
+    cloud = plugin.get_webui_emotion_cloud()
+
+    assert cloud["count"] == 100
+    assert cloud["limit"] == 100
+    assert cloud["label_names"]["happy"] == "愉快"
+    assert cloud["label_names"]["anxious"] == "焦虑"
+    assert cloud["records"][0]["id"] == "record-5"
+    assert cloud["records"][-1]["id"] == "record-104"
+    assert cloud["label_counts"]["happy"] == 50
+    assert cloud["label_counts"]["neutral"] == 50
+
+
+def test_webui_emotion_history_rebuilds_when_limit_changes():
+    plugin = VolcengineAsrPlugin(None, {"api_key": "token", "webui_emotion_history_limit": 100})
+    plugin._emotion_history.append(
+        EmotionHistoryRecord(
+            id="record-1",
+            timestamp="2026-05-08T00:00:00Z",
+            label="anxious",
+            emotion_weights={"anxious": 1.0},
+            confidence=0.8,
+            respect_weight=0.4,
+            valence=-0.2,
+            arousal=0.7,
+            voice_text_support=0.9,
+            context_support=0.2,
+            reason="sample",
+            text_preview="hello",
+            text_length=5,
+        )
+    )
+
+    result = plugin.update_webui_config({"webui_emotion_history_limit": 180})
+
+    assert result["errors"] == {}
+    assert plugin.webui_emotion_history_limit == 180
+    assert plugin._emotion_history.maxlen == 180
+    assert plugin.get_webui_emotion_cloud()["records"][0]["id"] == "record-1"
 
 
 def test_runtime_config_skips_ffmpeg_probe_when_transcode_disabled():

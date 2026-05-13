@@ -1,5 +1,30 @@
 # 更新说明
 
+## v3.0.0-pr1 - 诊断、情绪接口与 Token 风险保护候选版
+
+### 主要变更
+
+- 新增 `/volc_asr_doctor` 一键诊断命令，输出火山鉴权、ffmpeg、LivingMemory 分层、Token 风险保护、情绪层与重复插件目录风险提示。
+- Web UI 新增 `doctor` API 和诊断面板，继续保留情绪云图、配置编辑与情绪缓存接口。
+- 新增 `TokenRiskPolicy` 与 `TokenRiskAssessment`，对语音提示词和情绪判断 prompt 做本地 token 风险估算；达到高风险/极高风险阈值时会压缩提示或只保留干净转写，避免数十万 token 级请求导致模型空输出。
+- 情绪算法接口化，新增 `EmotionAnalyzer`、`EmotionScorer`、`EmotionLabeler`、`EmotionCoordinateMapper`、`EmotionPromptBuilder` 和 `DefaultEmotionEngine`，后续分支可替换情绪评分、标签、坐标和提示词构造，不必修改 ASR 主流程。
+- 情绪判断新增上下文字符上限，默认限制进入情绪 LLM 的上下文长度，降低成本和误注入风险。
+- 配置新增 `enable_token_risk_guard`、`token_risk_medium_tokens`、`token_risk_high_tokens`、`token_risk_critical_tokens`、`emotion_context_char_limit`。
+
+### 风险提示
+
+- 本版本为 `pr1` 候选版，适合测试服务器和分支验证；正式部署前请继续观察真实 AstrBot、NapCat、LivingMemory、LLM provider 的组合表现。
+- Token 风险保护使用本地估算，不等同于 provider 真实计费 token；它只能降低超长 prompt 事故概率，不能保证成本、延迟或模型输出稳定。
+- `/volc_asr_doctor` 会提示重复插件目录风险，但不会自动删除服务器上的 `plugin_upload_*` 旧目录。若 `/volc_asr_status` 返回多次，仍需手动清理旧目录并重启 AstrBot。
+
+### 验证
+
+- `py -3 -m py_compile .\main.py .\astrbot_plugin_volcengine_asr\main.py .\tests\test_helpers.py .\tests\test_voice_workflow.py`
+- `py -3 -m json.tool .\astrbot_plugin_volcengine_asr\_conf_schema.json`
+- `py -3 -m json.tool .\_conf_schema.json`
+- `py -3 -m pytest tests\test_helpers.py tests\test_voice_workflow.py -q`
+- 本地结果：`109 passed`
+
 ## v2.2.0 - LivingMemory 适配正式版
 
 ### 主要变更

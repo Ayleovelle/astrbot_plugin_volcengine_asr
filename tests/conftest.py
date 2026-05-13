@@ -86,8 +86,16 @@ class _Star:
         self.context = context
 
 
+class _Context:
+    def __init__(self):
+        self.registered_web_apis = []
+
+    def register_web_api(self, route, view_handler, methods, desc):
+        self.registered_web_apis.append((route, view_handler, methods, desc))
+
+
 star = types.ModuleType("astrbot.api.star")
-star.Context = object
+star.Context = _Context
 star.Star = _Star
 
 core_star = types.ModuleType("astrbot.core.star.star")

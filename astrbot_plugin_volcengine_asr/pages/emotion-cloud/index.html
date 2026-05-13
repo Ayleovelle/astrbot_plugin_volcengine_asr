@@ -1,0 +1,1168 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>火山 ASR 情绪云图</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1014;
+        --panel: rgba(17, 24, 30, 0.82);
+        --panel-strong: rgba(20, 29, 36, 0.96);
+        --line: rgba(171, 189, 196, 0.18);
+        --text: #eef6f4;
+        --muted: #92a5a7;
+        --accent: #6ee7d8;
+        --accent-2: #ff9d5c;
+        --danger: #ff6b6b;
+        --ok: #88f2a3;
+        --shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", "Microsoft YaHei", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 18% 10%, rgba(110, 231, 216, 0.18), transparent 28%),
+          radial-gradient(circle at 88% 18%, rgba(255, 157, 92, 0.14), transparent 32%),
+          linear-gradient(135deg, #080b0f 0%, #0c1518 48%, #101116 100%);
+        color: var(--text);
+      }
+
+      .shell {
+        width: min(1280px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0 34px;
+      }
+
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 28px;
+        letter-spacing: 0;
+      }
+
+      .subtitle {
+        margin: 8px 0 0;
+        color: var(--muted);
+        line-height: 1.7;
+        max-width: 760px;
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      button {
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text);
+        border-radius: 8px;
+        padding: 9px 13px;
+        cursor: pointer;
+        transition:
+          transform 160ms ease,
+          border-color 160ms ease,
+          background 160ms ease;
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+        border-color: rgba(110, 231, 216, 0.55);
+        background: rgba(110, 231, 216, 0.1);
+      }
+
+      button.primary {
+        color: #071013;
+        border-color: transparent;
+        background: linear-gradient(135deg, var(--accent), #b9f7c5);
+        font-weight: 700;
+      }
+
+      button.danger:hover {
+        border-color: rgba(255, 107, 107, 0.65);
+        background: rgba(255, 107, 107, 0.12);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.55fr) minmax(340px, 0.95fr);
+        gap: 18px;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+      }
+
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 18px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .panel-title {
+        margin: 0;
+        font-size: 16px;
+        letter-spacing: 0;
+      }
+
+      .status {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .pill {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 4px 9px;
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .canvas-wrap {
+        position: relative;
+        min-height: 620px;
+        padding: 20px;
+      }
+
+      #cloud {
+        width: 100%;
+        height: 560px;
+        display: block;
+        cursor: grab;
+        touch-action: none;
+        border-radius: 8px;
+        background:
+          linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+          radial-gradient(circle at 50% 50%, rgba(110, 231, 216, 0.08), transparent 58%),
+          rgba(5, 10, 13, 0.72);
+        background-size:
+          44px 44px,
+          44px 44px,
+          100% 100%,
+          100% 100%;
+      }
+
+      #cloud.rotating {
+        cursor: grabbing;
+      }
+
+      .axis {
+        position: absolute;
+        color: rgba(238, 246, 244, 0.6);
+        font-size: 12px;
+        pointer-events: none;
+      }
+
+      .axis.x-left {
+        left: 28px;
+        bottom: 18px;
+      }
+
+      .axis.x-right {
+        right: 28px;
+        bottom: 18px;
+      }
+
+      .axis.y-top {
+        left: 28px;
+        top: 24px;
+      }
+
+      .axis.y-bottom {
+        left: 28px;
+        bottom: 40px;
+      }
+
+      .tooltip {
+        position: absolute;
+        z-index: 5;
+        min-width: 230px;
+        max-width: 320px;
+        border: 1px solid rgba(110, 231, 216, 0.38);
+        border-radius: 8px;
+        padding: 12px;
+        background: rgba(9, 14, 18, 0.98);
+        box-shadow:
+          0 22px 56px rgba(0, 0, 0, 0.55),
+          0 0 0 1px rgba(238, 246, 244, 0.06) inset;
+        pointer-events: none;
+        opacity: 0;
+        transform: translateY(6px);
+        transition:
+          opacity 120ms ease,
+          transform 120ms ease;
+      }
+
+      .tooltip.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .tooltip strong {
+        display: block;
+        margin-bottom: 7px;
+        color: var(--accent);
+      }
+
+      .tooltip .preview {
+        margin: 8px 0 0;
+        color: var(--text);
+        line-height: 1.55;
+      }
+
+      .side {
+        display: grid;
+        gap: 18px;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        padding: 16px;
+      }
+
+      .metric {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        background: rgba(255, 255, 255, 0.045);
+      }
+
+      .metric span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .metric b {
+        display: block;
+        margin-top: 5px;
+        font-size: 20px;
+      }
+
+      .form {
+        padding: 16px;
+        display: grid;
+        gap: 13px;
+      }
+
+      label {
+        display: grid;
+        gap: 7px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.22);
+        color: var(--text);
+        padding: 10px 11px;
+        outline: none;
+      }
+
+      textarea {
+        min-height: 108px;
+        resize: vertical;
+      }
+
+      .toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 11px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .toggle-row input {
+        width: 18px;
+        height: 18px;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 0 16px 16px;
+      }
+
+      .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      .message {
+        min-height: 22px;
+        color: var(--muted);
+        font-size: 13px;
+        padding: 0 16px 16px;
+      }
+
+      .message.error {
+        color: var(--danger);
+      }
+
+      .doctor {
+        display: grid;
+        gap: 10px;
+        padding: 16px;
+      }
+
+      .doctor-item {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 11px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .doctor-item b {
+        display: block;
+        margin-bottom: 5px;
+        font-size: 13px;
+      }
+
+      .doctor-item p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.55;
+        font-size: 12px;
+      }
+
+      .doctor-item.ok b {
+        color: var(--ok);
+      }
+
+      .doctor-item.warn b {
+        color: var(--accent-2);
+      }
+
+      .doctor-item.error b {
+        color: var(--danger);
+      }
+
+      @media (max-width: 900px) {
+        .topbar,
+        .grid {
+          grid-template-columns: 1fr;
+          display: grid;
+        }
+
+        .actions {
+          justify-content: flex-start;
+        }
+
+        .canvas-wrap {
+          min-height: 500px;
+        }
+
+        #cloud {
+          height: 440px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <h1>火山 ASR 情绪云图</h1>
+          <p class="subtitle">
+            最近 100-200 条语音情绪判断会落到效价与唤醒二维空间中。颜色表示主要情绪，点的大小综合置信度与参考权重。
+          </p>
+        </div>
+        <div class="actions">
+          <button id="refresh">刷新</button>
+          <button id="clear" class="danger">清空缓存</button>
+          <button id="save" class="primary">保存配置</button>
+        </div>
+      </header>
+
+      <section class="grid">
+        <article class="panel">
+          <div class="panel-head">
+            <h2 class="panel-title">情绪空间</h2>
+            <div class="status">
+              <span class="pill" id="version">版本 --</span>
+              <span class="pill" id="count">0 条记录</span>
+              <span class="pill" id="emotion-state">情绪层 --</span>
+            </div>
+          </div>
+          <div class="canvas-wrap" id="canvasWrap">
+            <canvas id="cloud"></canvas>
+            <span class="axis x-left">负向</span>
+            <span class="axis x-right">正向</span>
+            <span class="axis y-top">高唤醒</span>
+            <span class="axis y-bottom">低唤醒</span>
+            <div id="tooltip" class="tooltip"></div>
+          </div>
+        </article>
+
+        <aside class="side">
+          <article class="panel">
+            <div class="panel-head">
+              <h2 class="panel-title">运行摘要</h2>
+            </div>
+            <div class="metrics">
+              <div class="metric"><span>鉴权</span><b id="auth">--</b></div>
+              <div class="metric"><span>ffmpeg</span><b id="ffmpeg">--</b></div>
+              <div class="metric"><span>缓存上限</span><b id="limit">--</b></div>
+              <div class="metric"><span>模型</span><b id="model">--</b></div>
+            </div>
+            <div id="legend" class="legend"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h2 class="panel-title">诊断</h2>
+            </div>
+            <div id="doctor" class="doctor"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h2 class="panel-title">插件配置</h2>
+            </div>
+            <form class="form" id="configForm">
+              <div class="toggle-row">
+                <span>自动识别语音</span>
+                <input name="auto_recognize" type="checkbox" />
+              </div>
+              <div class="toggle-row">
+                <span>注入为用户输入</span>
+                <input name="inject_as_user_input" type="checkbox" />
+              </div>
+              <div class="toggle-row">
+                <span>启用情绪判断</span>
+                <input name="enable_emotion_analysis" type="checkbox" />
+              </div>
+              <div class="toggle-row">
+                <span>Token 风险保护</span>
+                <input name="enable_token_risk_guard" type="checkbox" />
+              </div>
+              <label>
+                提交方式
+                <select name="submit_mode">
+                  <option value="base64">Base64 上传</option>
+                  <option value="url">URL 直传</option>
+                </select>
+              </label>
+              <label>
+                最大音频 MB
+                <input name="max_audio_mb" type="number" min="1" max="100" />
+              </label>
+              <label>
+                情绪模型 ID
+                <input name="emotion_model_id" type="text" placeholder="留空使用当前会话主 LLM" />
+              </label>
+              <label>
+                情绪最大参考权重 %
+                <input name="emotion_max_respect_weight_percent" type="number" min="0" max="100" />
+              </label>
+              <label>
+                情绪上下文字符上限
+                <input name="emotion_context_char_limit" type="number" min="0" max="20000" />
+              </label>
+              <label>
+                Token 极高风险阈值
+                <input name="token_risk_critical_tokens" type="number" min="1000" max="500000" />
+              </label>
+              <label>
+                情绪缓存数量
+                <input name="webui_emotion_history_limit" type="number" min="100" max="200" />
+              </label>
+              <label>
+                情绪提示词模板
+                <textarea name="emotion_prompt_template"></textarea>
+              </label>
+            </form>
+            <div id="message" class="message"></div>
+          </article>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module">
+      const bridge = window.AstrBotPluginPage;
+      const canvas = document.getElementById("cloud");
+      const ctx = canvas.getContext("2d");
+      const tooltip = document.getElementById("tooltip");
+      const wrap = document.getElementById("canvasWrap");
+      const form = document.getElementById("configForm");
+      const message = document.getElementById("message");
+
+      const colors = {
+        neutral: ["#8aa0a5", "#d4e3e5"],
+        happy: ["#73f7a1", "#f5e66a"],
+        sad: ["#5d83ff", "#9bb7ff"],
+        angry: ["#ff5d5d", "#ffb15d"],
+        anxious: ["#b389ff", "#6ee7d8"],
+        frustrated: ["#ff7a90", "#ffb86b"],
+        excited: ["#6ee7d8", "#c7ff70"],
+        confused: ["#9ca3af", "#c084fc"],
+        tired: ["#7a8b91", "#b7c0c4"],
+      };
+
+      const defaultLabelNames = {
+        neutral: "平静",
+        happy: "愉快",
+        sad: "低落",
+        angry: "生气",
+        anxious: "焦虑",
+        frustrated: "受挫",
+        excited: "兴奋",
+        confused: "困惑",
+        tired: "疲惫",
+      };
+
+      const state = {
+        records: [],
+        points: [],
+        hoverId: null,
+        hoverFocusId: null,
+        hoverFocusTimer: 0,
+        selectedId: null,
+        rotationMatrix: [
+          0.984, 0, -0.179,
+          -0.046, 0.966, -0.256,
+          0.173, 0.26, 0.95,
+        ],
+        targetRotationMatrix: [
+          0.984, 0, -0.179,
+          -0.046, 0.966, -0.256,
+          0.173, 0.26, 0.95,
+        ],
+        dragStartVector: null,
+        dragStartMatrix: null,
+        cameraDistance: 980,
+        targetCameraDistance: 980,
+        isRotating: false,
+        dragStartX: 0,
+        dragStartY: 0,
+        pointMotion: new Map(),
+        animation: 0,
+        values: {},
+        labelNames: { ...defaultLabelNames },
+      };
+
+      const setMessage = (text, isError = false) => {
+        message.textContent = text || "";
+        message.classList.toggle("error", Boolean(isError));
+      };
+
+      const unwrap = (result) => result?.data ?? result;
+      const labelName = (label) => state.labelNames[label] || defaultLabelNames[label] || label;
+
+      const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+      const parseTimestamp = (record) => {
+        const time = Date.parse(record.timestamp || "");
+        return Number.isFinite(time) ? time : 0;
+      };
+
+      const identityMatrix = () => [
+        1, 0, 0,
+        0, 1, 0,
+        0, 0, 1,
+      ];
+
+      const normalizeVector = (vector) => {
+        const length = Math.hypot(vector.x, vector.y, vector.z) || 1;
+        return {
+          x: vector.x / length,
+          y: vector.y / length,
+          z: vector.z / length,
+        };
+      };
+
+      const multiplyMatrix = (a, b) => [
+        a[0] * b[0] + a[1] * b[3] + a[2] * b[6],
+        a[0] * b[1] + a[1] * b[4] + a[2] * b[7],
+        a[0] * b[2] + a[1] * b[5] + a[2] * b[8],
+        a[3] * b[0] + a[4] * b[3] + a[5] * b[6],
+        a[3] * b[1] + a[4] * b[4] + a[5] * b[7],
+        a[3] * b[2] + a[4] * b[5] + a[5] * b[8],
+        a[6] * b[0] + a[7] * b[3] + a[8] * b[6],
+        a[6] * b[1] + a[7] * b[4] + a[8] * b[7],
+        a[6] * b[2] + a[7] * b[5] + a[8] * b[8],
+      ];
+
+      const transformPoint = (matrix, point) => ({
+        x: matrix[0] * point.x + matrix[1] * point.y + matrix[2] * point.z,
+        y: matrix[3] * point.x + matrix[4] * point.y + matrix[5] * point.z,
+        z: matrix[6] * point.x + matrix[7] * point.y + matrix[8] * point.z,
+      });
+
+      const slerpMatrix = (from, to, amount) => from.map((value, index) => value + (to[index] - value) * amount);
+
+      const arcballVector = (event) => {
+        const rect = canvas.getBoundingClientRect();
+        const size = Math.min(rect.width, rect.height);
+        const x = ((event.clientX - rect.left) - rect.width / 2) / (size / 2);
+        const y = (rect.height / 2 - (event.clientY - rect.top)) / (size / 2);
+        const lengthSq = x * x + y * y;
+        if (lengthSq <= 1) {
+          return normalizeVector({ x, y, z: Math.sqrt(1 - lengthSq) });
+        }
+        return normalizeVector({ x, y, z: 0 });
+      };
+
+      const rotationMatrixFromVectors = (from, to) => {
+        const axis = {
+          x: from.y * to.z - from.z * to.y,
+          y: from.z * to.x - from.x * to.z,
+          z: from.x * to.y - from.y * to.x,
+        };
+        const axisLength = Math.hypot(axis.x, axis.y, axis.z);
+        const dot = clamp(from.x * to.x + from.y * to.y + from.z * to.z, -1, 1);
+        if (axisLength < 0.0001) {
+          if (dot > 0) return identityMatrix();
+          return [
+            -1, 0, 0,
+            0, -1, 0,
+            0, 0, 1,
+          ];
+        }
+        const unit = {
+          x: axis.x / axisLength,
+          y: axis.y / axisLength,
+          z: axis.z / axisLength,
+        };
+        const angle = Math.atan2(axisLength, dot);
+        const c = Math.cos(angle);
+        const s = Math.sin(angle);
+        const t = 1 - c;
+        return [
+          t * unit.x * unit.x + c,
+          t * unit.x * unit.y - s * unit.z,
+          t * unit.x * unit.z + s * unit.y,
+          t * unit.x * unit.y + s * unit.z,
+          t * unit.y * unit.y + c,
+          t * unit.y * unit.z - s * unit.x,
+          t * unit.x * unit.z - s * unit.y,
+          t * unit.y * unit.z + s * unit.x,
+          t * unit.z * unit.z + c,
+        ];
+      };
+
+      const assertBridge = () => {
+        if (!bridge || typeof bridge.apiGet !== "function" || typeof bridge.apiPost !== "function") {
+          throw new Error("AstrBot 插件页面桥接未注入，请从 AstrBot Dashboard 的插件页面打开。");
+        }
+      };
+
+      const bridgeReady = async () => {
+        assertBridge();
+        if (typeof bridge.ready === "function") {
+          await bridge.ready();
+        }
+      };
+
+      const apiGet = async (endpoint) => {
+        assertBridge();
+        return unwrap(await bridge.apiGet(endpoint));
+      };
+      const apiPost = async (endpoint, body = {}) => {
+        assertBridge();
+        return unwrap(await bridge.apiPost(endpoint, body));
+      };
+
+      const resizeCanvas = () => {
+        const rect = canvas.getBoundingClientRect();
+        const ratio = window.devicePixelRatio || 1;
+        const width = Math.max(1, Math.floor(rect.width * ratio));
+        const height = Math.max(1, Math.floor(rect.height * ratio));
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+        }
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      };
+
+      const coord = (record) => {
+        const rect = canvas.getBoundingClientRect();
+        const pad = 42;
+        const x = pad + ((Number(record.valence) + 1) / 2) * (rect.width - pad * 2);
+        const y = rect.height - pad - Number(record.arousal) * (rect.height - pad * 2);
+        return { x, y };
+      };
+
+      const worldCoord = (record, index) => {
+        const valence = clamp(Number(record.valence || 0), -1, 1);
+        const arousal = clamp(Number(record.arousal || 0), 0, 1);
+        const support = clamp(Number(record.voice_text_support || record.context_support || 0.5), 0, 1);
+        const labelSeed = (String(record.label || "").split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % 41) / 40;
+        const z = (support - 0.5) * 240 + (labelSeed - 0.5) * 110 + ((index % 7) - 3) * 10;
+        return {
+          x: valence * 330,
+          y: (arousal - 0.5) * -430,
+          z,
+        };
+      };
+
+      const project3d = (point, rect) => {
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const rotated = transformPoint(state.rotationMatrix, point);
+        const distance = Math.max(420, state.cameraDistance);
+        const focal = 720;
+        const perspective = focal / Math.max(160, distance + rotated.z);
+        return {
+          x: centerX + rotated.x * perspective,
+          y: centerY + rotated.y * perspective,
+          z: rotated.z,
+          perspective,
+        };
+      };
+
+      const getFreshnessByOrder = (index, total) => {
+        if (total <= 1) return 1;
+        return index / (total - 1);
+      };
+
+      const getFreshnessByTime = (record, minTime, maxTime) => {
+        const time = parseTimestamp(record);
+        if (!time || maxTime <= minTime) return null;
+        return (time - minTime) / (maxTime - minTime);
+      };
+
+      const getSelectedPoint = () => state.points.find((point) => point.record.id === state.selectedId) || null;
+
+      const getFocusId = () => state.selectedId || state.hoverFocusId;
+
+      const rebuildPoints = () => {
+        const rect = canvas.getBoundingClientRect();
+        const times = state.records.map(parseTimestamp).filter(Boolean);
+        const minTime = times.length ? Math.min(...times) : 0;
+        const maxTime = times.length ? Math.max(...times) : 0;
+        const total = state.records.length;
+        const draft = state.records.map((record, index) => {
+          const world = worldCoord(record, index);
+          const projected = project3d(world, rect);
+          const timeFreshness = getFreshnessByTime(record, minTime, maxTime);
+          const freshness = clamp(timeFreshness ?? getFreshnessByOrder(index, total), 0, 1);
+          const weight = clamp(Number(record.respect_weight || 0), 0, 1);
+          const confidence = clamp(Number(record.confidence || 0), 0, 1);
+          const depthAlpha = clamp((projected.z + 360) / 720, 0, 1);
+          const radius = (3 + Math.min(5.8, weight * 4.7 + confidence * 2.9)) * clamp(projected.perspective, 0.58, 1.55);
+          return {
+            record,
+            worldX: world.x,
+            worldY: world.y,
+            worldZ: world.z,
+            x: projected.x,
+            y: projected.y,
+            z: projected.z,
+            targetX: projected.x,
+            targetY: projected.y,
+            radius,
+            targetRadius: radius,
+            freshness,
+            alpha: (0.14 + freshness * 0.66) * (0.7 + depthAlpha * 0.36),
+            targetAlpha: (0.14 + freshness * 0.66) * (0.7 + depthAlpha * 0.36),
+            index,
+          };
+        });
+        const focusId = getFocusId();
+        const focused = draft.find((point) => point.record.id === focusId);
+        if (focused) {
+          for (const point of draft) {
+            if (point === focused) continue;
+            const dx = point.x - focused.x;
+            const dy = point.y - focused.y;
+            const distance = Math.max(1, Math.hypot(dx, dy));
+            const proximity = clamp(1 - distance / Math.max(rect.width, rect.height), 0, 1);
+            const spread = 34 + proximity * 40;
+            point.targetX = clamp(point.x + (dx / distance) * spread, 16, rect.width - 16);
+            point.targetY = clamp(point.y + (dy / distance) * spread, 16, rect.height - 16);
+            point.targetAlpha = point.alpha * 0.46;
+          }
+          focused.targetRadius = focused.radius * 1.45;
+          focused.targetAlpha = 1;
+        }
+        const liveIds = new Set();
+        for (const point of draft) {
+          const id = point.record.id;
+          liveIds.add(id);
+          const motion = state.pointMotion.get(id) || {
+            x: point.targetX,
+            y: point.targetY,
+            radius: point.targetRadius,
+            alpha: point.targetAlpha,
+          };
+          const pace = focusId ? 0.18 : 0.24;
+          motion.x += (point.targetX - motion.x) * pace;
+          motion.y += (point.targetY - motion.y) * pace;
+          motion.radius += (point.targetRadius - motion.radius) * 0.2;
+          motion.alpha += (point.targetAlpha - motion.alpha) * 0.2;
+          point.x = motion.x;
+          point.y = motion.y;
+          point.radius = motion.radius;
+          point.alpha = motion.alpha;
+          state.pointMotion.set(id, motion);
+        }
+        for (const id of state.pointMotion.keys()) {
+          if (!liveIds.has(id)) state.pointMotion.delete(id);
+        }
+        state.points = draft;
+      };
+
+      const drawAxes = () => {
+        const rect = canvas.getBoundingClientRect();
+        ctx.save();
+        ctx.strokeStyle = "rgba(238,246,244,0.18)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(rect.width / 2, 24);
+        ctx.lineTo(rect.width / 2, rect.height - 24);
+        ctx.moveTo(24, rect.height / 2);
+        ctx.lineTo(rect.width - 24, rect.height / 2);
+        ctx.stroke();
+        ctx.restore();
+      };
+
+      const drawCloud = () => {
+        resizeCanvas();
+        state.rotationMatrix = slerpMatrix(state.rotationMatrix, state.targetRotationMatrix, 0.22);
+        state.cameraDistance += (state.targetCameraDistance - state.cameraDistance) * 0.18;
+        rebuildPoints();
+        const rect = canvas.getBoundingClientRect();
+        ctx.clearRect(0, 0, rect.width, rect.height);
+        drawAxes();
+
+        const hover = state.points.find((point) => point.record.id === state.hoverId);
+        const selected = getSelectedPoint();
+        const sortedPoints = [...state.points].sort((a, b) => a.z - b.z || a.freshness - b.freshness);
+        for (const point of sortedPoints) {
+          const isHover = hover === point;
+          const isSelected = selected === point;
+          const active = !selected || isSelected || !hover || isHover;
+          const palette = colors[point.record.label] || colors.neutral;
+          const scale = isSelected ? 1.45 : isHover ? 1.35 : 1;
+          const glowRadius = point.radius * scale * 2.1;
+          const gradient = ctx.createRadialGradient(point.x, point.y, 1, point.x, point.y, glowRadius);
+          gradient.addColorStop(0, palette[1]);
+          gradient.addColorStop(0.52, palette[0]);
+          gradient.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.save();
+          ctx.globalAlpha = active ? point.alpha : Math.max(0.045, point.alpha * 0.34);
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, glowRadius, 0, Math.PI * 2);
+          ctx.fillStyle = gradient;
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, point.radius * scale, 0, Math.PI * 2);
+          ctx.fillStyle = palette[0];
+          ctx.fill();
+          if (isSelected) {
+            ctx.globalAlpha = 0.9;
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = palette[1];
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+      };
+
+      const nearestPoint = (event) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        let best = null;
+        let bestDistance = Infinity;
+        for (const point of state.points) {
+          const distance = Math.hypot(point.x - x, point.y - y);
+          if (distance < bestDistance) {
+            best = point;
+            bestDistance = distance;
+          }
+        }
+        return best && bestDistance <= Math.max(18, best.radius * 1.7) ? best : null;
+      };
+
+      const showTooltip = (point) => {
+        if (!point) {
+          tooltip.classList.remove("visible");
+          return;
+        }
+        const record = point.record;
+        tooltip.innerHTML = `
+          <strong>${labelName(record.label)}</strong>
+          <div>valence ${Number(record.valence).toFixed(2)} / arousal ${Number(record.arousal).toFixed(2)}</div>
+          <div>confidence ${Number(record.confidence).toFixed(2)} / respect ${Number(record.respect_weight).toFixed(2)}</div>
+          <div>${record.reason || "无摘要原因"}</div>
+          <div class="preview">${record.text_preview || "无文本预览"}</div>
+        `;
+        const wrapRect = wrap.getBoundingClientRect();
+        const left = Math.min(point.x + 28, wrapRect.width - 340);
+        const top = Math.max(16, Math.min(point.y - 28, wrapRect.height - 210));
+        tooltip.style.left = `${Math.max(16, left)}px`;
+        tooltip.style.top = `${top}px`;
+        tooltip.classList.add("visible");
+      };
+
+      const updateHoverFromEvent = (event) => {
+        const point = nearestPoint(event);
+        const nextId = point?.record.id || null;
+        if (nextId !== state.hoverId) {
+          state.hoverId = nextId;
+          showTooltip(point);
+          window.clearTimeout(state.hoverFocusTimer);
+          if (!state.selectedId) {
+            state.hoverFocusId = null;
+          }
+          if (nextId) {
+            state.hoverFocusTimer = window.setTimeout(() => {
+              if (!state.selectedId && state.hoverId === nextId) {
+                state.hoverFocusId = nextId;
+              }
+            }, 200);
+          }
+        }
+      };
+
+      const animate = () => {
+        drawCloud();
+        state.animation = requestAnimationFrame(animate);
+      };
+
+      const fillForm = (values) => {
+        state.values = values || {};
+        for (const element of Array.from(form.elements)) {
+          if (!element.name) continue;
+          const value = state.values[element.name];
+          if (element.type === "checkbox") {
+            element.checked = Boolean(value);
+          } else {
+            element.value = value ?? "";
+          }
+        }
+      };
+
+      const collectForm = () => {
+        const updates = {};
+        for (const element of Array.from(form.elements)) {
+          if (!element.name) continue;
+          if (element.type === "checkbox") {
+            updates[element.name] = element.checked;
+          } else if (element.type === "number") {
+            updates[element.name] = element.value === "" ? "" : Number(element.value);
+          } else {
+            updates[element.name] = element.value;
+          }
+        }
+        return updates;
+      };
+
+      const renderDoctor = (doctorPayload) => {
+        const host = document.getElementById("doctor");
+        const checks = doctorPayload?.checks || [];
+        host.innerHTML = checks
+          .map((check) => {
+            const level = check.level || "info";
+            const suggestion = check.suggestion ? `<p>建议：${check.suggestion}</p>` : "";
+            return `
+              <div class="doctor-item ${level}">
+                <b>[${level}] ${check.title || check.key}</b>
+                <p>${check.message || ""}</p>
+                ${suggestion}
+              </div>
+            `;
+          })
+          .join("");
+      };
+
+      const renderSummary = (statePayload, emotionPayload, doctorPayload) => {
+        state.labelNames = { ...defaultLabelNames, ...(emotionPayload.label_names || {}) };
+        document.getElementById("version").textContent = `v${statePayload.version}`;
+        document.getElementById("count").textContent = `${emotionPayload.count} 条记录`;
+        document.getElementById("emotion-state").textContent = statePayload.emotion.enabled ? "情绪层已启用" : "情绪层关闭";
+        document.getElementById("auth").textContent = statePayload.auth_configured ? "已配置" : "未配置";
+        document.getElementById("ffmpeg").textContent = statePayload.ffmpeg_status;
+        document.getElementById("limit").textContent = `${emotionPayload.limit}`;
+        document.getElementById("model").textContent = statePayload.emotion.model_id || "当前会话";
+        renderDoctor(doctorPayload);
+
+        const legend = document.getElementById("legend");
+        legend.innerHTML = "";
+        for (const [label, count] of Object.entries(emotionPayload.label_counts || {})) {
+          if (!count) continue;
+          const item = document.createElement("span");
+          item.className = "legend-item";
+          const dot = document.createElement("span");
+          dot.className = "dot";
+          dot.style.background = (colors[label] || colors.neutral)[0];
+          item.append(dot, document.createTextNode(`${labelName(label)} ${count}`));
+          legend.appendChild(item);
+        }
+      };
+
+      const loadAll = async () => {
+        try {
+          setMessage("正在读取插件状态……");
+          const [statePayload, configPayload, emotionPayload, doctorPayload] = await Promise.all([
+            apiGet("state"),
+            apiGet("config"),
+            apiGet("emotions"),
+            apiGet("doctor"),
+          ]);
+          state.records = emotionPayload.records || [];
+          fillForm(configPayload.values || {});
+          renderSummary(statePayload, emotionPayload, doctorPayload);
+          setMessage("已同步。");
+        } catch (error) {
+          setMessage(error.message || "读取失败", true);
+        }
+      };
+
+      document.getElementById("refresh").addEventListener("click", loadAll);
+      document.getElementById("save").addEventListener("click", async () => {
+        try {
+          setMessage("正在保存配置……");
+          const result = await apiPost("config", { updates: collectForm() });
+          if (result.errors && Object.keys(result.errors).length) {
+            setMessage(JSON.stringify(result.errors), true);
+            return;
+          }
+          await loadAll();
+          setMessage("配置已保存。");
+        } catch (error) {
+          setMessage(error.message || "保存失败", true);
+        }
+      });
+
+      document.getElementById("clear").addEventListener("click", async () => {
+        if (!confirm("清空当前内存中的情绪云图记录？")) return;
+        await apiPost("emotions/clear", {});
+        await loadAll();
+      });
+
+      canvas.addEventListener("pointerdown", (event) => {
+        state.isRotating = true;
+        state.dragStartX = event.clientX;
+        state.dragStartY = event.clientY;
+        state.dragStartVector = arcballVector(event);
+        state.dragStartMatrix = [...state.targetRotationMatrix];
+        canvas.classList.add("rotating");
+        canvas.setPointerCapture?.(event.pointerId);
+      });
+
+      canvas.addEventListener("pointermove", (event) => {
+        if (state.isRotating) {
+          const currentVector = arcballVector(event);
+          const deltaMatrix = rotationMatrixFromVectors(state.dragStartVector, currentVector);
+          state.targetRotationMatrix = multiplyMatrix(deltaMatrix, state.dragStartMatrix);
+          updateHoverFromEvent(event);
+          return;
+        }
+        updateHoverFromEvent(event);
+      });
+
+      canvas.addEventListener("pointerup", (event) => {
+        const moved = Math.hypot(event.clientX - state.dragStartX, event.clientY - state.dragStartY);
+        state.isRotating = false;
+        canvas.classList.remove("rotating");
+        canvas.releasePointerCapture?.(event.pointerId);
+        if (moved <= 5) {
+          const point = nearestPoint(event);
+          state.selectedId = point?.record.id === state.selectedId ? null : point?.record.id || null;
+          state.hoverFocusId = state.selectedId || null;
+          showTooltip(point);
+        }
+      });
+
+      canvas.addEventListener("pointercancel", (event) => {
+        state.isRotating = false;
+        canvas.classList.remove("rotating");
+        canvas.releasePointerCapture?.(event.pointerId);
+      });
+
+      canvas.addEventListener("dblclick", () => {
+        state.selectedId = null;
+        state.hoverFocusId = null;
+        window.clearTimeout(state.hoverFocusTimer);
+        state.targetRotationMatrix = [
+          0.984, 0, -0.179,
+          -0.046, 0.966, -0.256,
+          0.173, 0.26, 0.95,
+        ];
+        state.targetCameraDistance = 980;
+      });
+
+      canvas.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        state.targetCameraDistance = clamp(
+          state.targetCameraDistance + event.deltaY * 0.7,
+          520,
+          1680,
+        );
+      });
+
+      canvas.addEventListener("mouseleave", () => {
+        if (state.isRotating) return;
+        window.clearTimeout(state.hoverFocusTimer);
+        state.hoverId = null;
+        if (!state.selectedId) {
+          state.hoverFocusId = null;
+        }
+        showTooltip(null);
+      });
+
+      window.addEventListener("resize", drawCloud);
+
+      try {
+        await bridgeReady();
+        await loadAll();
+        animate();
+      } catch (error) {
+        setMessage(error.message || "页面初始化失败", true);
+      }
+    </script>
+  </body>
+</html>

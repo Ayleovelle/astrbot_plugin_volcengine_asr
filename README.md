@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Current-2.2.0-brightgreen.svg" alt="Current 2.2.0">
+  <img src="https://img.shields.io/badge/Current-3.0.0--pr1-brightgreen.svg" alt="Current 3.0.0-pr1">
   <img src="https://img.shields.io/badge/Core-2.0.0%20Emotion%20Layer-ff69b4.svg" alt="Core 2.0.0 Emotion Layer">
   <img src="https://img.shields.io/badge/AstrBot-%3E=4.16,%3C5-orange.svg" alt="AstrBot >=4.16,<5">
   <img src="https://img.shields.io/badge/OneBot-v11-12B7F3.svg" alt="OneBot v11">
@@ -42,7 +42,8 @@
 | [快速开始](#quick-start) | Release zip、仓库安装、最小配置与状态检查。 |
 | [语音工作流](#voice-workflow) | 从 OneBot Record 到干净 ProviderRequest 的完整链路。 |
 | [2.0.0 情绪层](#emotion-layer) | 情绪判断 LLM、`respect_weight`、公式接口与边界。 |
-| [Token 与延迟](#token-latency) | 测试服务器 1000 次参考值与风险说明。 |
+| [Token 与延迟](#token-latency) | 测试服务器 1000 次参考值、风险说明与 v3 token guard。 |
+| [v3 诊断层](#v3-diagnostics) | `/volc_asr_doctor`、Web UI 诊断、token 风险保护与情绪接口化。 |
 | [配置指南](#configuration) | 常用配置、推荐值、调试开关与安全边界。 |
 | [排障手册](#troubleshooting) | `not a valid file`、上传包结构、ffmpeg、ProviderRequest。 |
 | [版本叙事](#version-story) | 以 2.0.0 为能力主线，2.1.x 折叠为兼容修补史。 |
@@ -52,37 +53,75 @@
 
 ---
 
-## 当前正式版：2.2.0
+## 当前候选版：3.0.0-pr1
 
-`2.2.0` 是把 `2.1.12-pr2` 实测结果整理后的正式发布版。它不改变 2.0.0 建立的主线能力：QQ / NapCat 语音进入 AstrBot 后，仍然会被转写成干净文本，再进入 LLM、上下文、LivingMemory 与后续插件流程。
+`3.0.0-pr1` 是一次面向大版本的候选更新。它不推翻 2.0.0 建立的主线能力：QQ / NapCat 语音进入 AstrBot 后，仍然会被转写成干净文本，再进入 LLM、上下文、LivingMemory 与后续插件流程。
 
 > [!WARNING]
-> `2.2.0` 已从实验版转为正式发布，但它仍然依赖 AstrBot、NapCat、OneBot、Docker 挂载路径、LLM provider 与第三方插件共同工作。下面的测试记录只代表作者当前测试条件，不构成生产环境稳定性承诺；因部署差异导致的识别失败、回复异常、额外 token 消耗、延迟增加或第三方服务费用变化，仍需由部署者自行评估和承担。
+> `3.0.0-pr1` 是候选版，不是稳定正式版。它仍然依赖 AstrBot、NapCat、OneBot、Docker 挂载路径、LLM provider 与第三方插件共同工作。下面的测试记录只代表作者当前测试条件，不构成生产环境稳定性承诺；因部署差异导致的识别失败、回复异常、额外 token 消耗、延迟增加或第三方服务费用变化，仍需由部署者自行评估和承担。
 
 这版主要更新：
 
 | 类别 | 更新内容 | 解决的问题 |
 | :--- | :--- | :--- |
-| LivingMemory 适配 | 识别成功后保护 `event.get_message_str()` 的返回值，避免其它插件读取到旧的空文本或旧消息。 | 让 LivingMemory 等插件拿到 ASR 后的干净用户文本，而不是 `Record`、附件路径或空字符串。 |
-| ProviderRequest 防崩 | 保留 provider content part 对象形态，只在确认存在音频引用时清理。 | 降低 `'dict' object has no attribute 'model_dump_for_context'` 复发风险。 |
-| agent 前清理 | 延续 2.1.x 对 `event.extras`、`message_obj.extras`、`run_context`、缓存请求对象与音频引用的清理。 | 避免旧 `.amr/.silk/.wav` 残留进入 `agent_sub_stages`。 |
-| 正式化发布 | 将 `2.1.12-pr2` 的测试服结果升格为 `2.2.0` 正式版。 | 结束实验版本号，让后续维护以 `2.2.x` 为稳定分支继续演进。 |
+| 一键诊断 | 新增 `/volc_asr_doctor` 与 Web UI `doctor` API。 | 把鉴权、ffmpeg、LivingMemory 分层、token guard、重复插件目录风险放到一个报告里。 |
+| Token 风险保护 | 新增本地 token 估算和 medium/high/critical 降级策略。 | 避免超长 prompt 继续打到 LLM，降低空回复和高额消耗风险。 |
+| 情绪接口化 | 新增 `DefaultEmotionEngine` 及 prompt、label、coordinate、score 接口。 | 后续分支可替换情绪算法，不必改 ASR 主流程。 |
+| Web UI 诊断 | 情绪云图页面新增诊断面板和 token 风险配置。 | 让用户不只看情绪点，也能看到运行风险。 |
 
 验证记录：
 
 | 项目 | 结果 |
 | :--- | :--- |
-| 本地回归 | 95 项通过 |
+| 本地回归 | 109 项通过 |
 | 语法检查 | 通过 |
-| 测试服安装 | 通过 |
-| LivingMemory 适配 | WebChat Record -> 火山 ASR -> LLM -> LivingMemory conversation 实测通过 |
-| `/volc_asr_status` | 返回 `2.2.0`，内置 ffmpeg 可用 |
+| JSON 配置检查 | 通过 |
+| `/volc_asr_status` | 应返回 `3.0.0-pr1` |
+| `/volc_asr_doctor` | 返回结构化诊断摘要 |
 | 包体校验 | 正式 Release 附件请以发布说明中的 SHA256 为准；本地重新打包会因为 README 内容变化产生新的 SHA256。 |
 
-一句话概括：`2.2.0` 是“2.0.0 主线能力 + 2.1.x 真实环境加固 + LivingMemory 适配实测”的正式版。
+一句话概括：`3.0.0-pr1` 是“2.0.0 主线能力 + 2.1.x 真实环境加固 + v3 诊断/接口/token guard”的候选版。
 
 > [!NOTE]
 > `agent 前清理` 和 `ProviderRequest 防崩` 是针对已知 AstrBot / NapCat / 插件缓存形态的兼容加固，用于降低问题复发概率，不保证覆盖所有自定义缓存、第三方插件写入方式或未来 AstrBot 内部结构变化。
+
+---
+
+<a id="v3-diagnostics"></a>
+
+## v3 诊断层
+
+`3.0.0-pr1` 开始，插件新增一层“先诊断、再识别、再注入”的保护设施。它的目标不是替用户自动修改服务器，而是在出现问题时尽量告诉你：现在坏在配置、ffmpeg、重复插件、token 风险、还是第三方流程。
+
+| 能力 | 入口 | 说明 |
+| :--- | :--- | :--- |
+| 状态检查 | `/volc_asr_status` | 适合快速确认版本、鉴权、ffmpeg、情绪层和基础配置。 |
+| 一键诊断 | `/volc_asr_doctor` | 输出火山鉴权、ffmpeg、LivingMemory 分层、token guard、重复插件目录风险。 |
+| Web UI 诊断 | 插件页面 `doctor` API | 情绪云图页面会显示诊断面板，便于从 Dashboard 查看当前风险。 |
+| Token 风险保护 | `enable_token_risk_guard` | 默认开启。估算 prompt token 后，按阈值压缩情绪提示、压缩语音提示或只保留干净转写。 |
+| 情绪接口化 | `DefaultEmotionEngine` | 分支可替换 prompt、标签、坐标、评分策略，不直接碰 ASR 主流程。 |
+
+> [!WARNING]
+> Token 风险保护是本地估算，不等同于 LLM provider 的真实计费 token。它只能降低“超长上下文导致空回复或高额消耗”的概率，不能保证成本、延迟、模型输出或第三方中转行为稳定。尤其当长期记忆、多个插件、群聊历史和工具调用同时打开时，最终请求大小仍可能被其它组件放大。
+
+默认阈值：
+
+| 配置项 | 默认值 | 行为 |
+| :--- | :--- | :--- |
+| `token_risk_medium_tokens` | `8000` | 压缩情绪辅助信息。 |
+| `token_risk_high_tokens` | `24000` | 使用压缩语音提示。 |
+| `token_risk_critical_tokens` | `64000` | 跳过 LLM 注入，只保留干净转写。 |
+| `emotion_context_char_limit` | `2000` | 限制进入情绪判断 LLM 的上下文字符数。 |
+
+如果你看到类似：
+
+```text
+prompt_tokens=386090
+completion_tokens=0
+OpenAI completion has no usable output
+```
+
+这通常说明主 LLM 请求已经过大或上游服务空回复。v3 的 token guard 会尽量在插件自己的语音提示层提前降级，但它不能替其它插件、长期记忆或 AstrBot provider 本身截断所有上下文。遇到这种情况，应同时检查长期记忆注入量、群聊上下文轮数、工具调用历史和其它插件写入的 prompt。
 
 ---
 
@@ -177,6 +216,8 @@ not a valid file: xxx.amr
 
 > [!WARNING]
 > 请下载 Release 页面里的 `astrbot_plugin_volcengine_asr.zip`。不要把 GitHub 绿色 Code 按钮下载的 Source code zip 当作安装包；Source code zip 的顶层目录、内置 ffmpeg、元数据位置和 AstrBot 上传安装器预期可能不一致。免责声明：如果使用非 Release 附件安装，导致插件加载失败、缺少文件、ffmpeg 不可用或版本不一致，需要部署者自行回滚、重装或重新打包。
+>
+> 如果你的服务器、容器或宝塔环境从来没有安装过系统 `ffmpeg`，请优先使用 Release 附件包体安装。本插件的内置 `ffmpeg` 只随 Release zip 一起发布；源码 zip、仓库安装或手动复制文件可能不包含可执行转码器。
 
 Release zip 固定为单顶层目录结构：
 
@@ -239,7 +280,7 @@ enable_emotion_analysis = false
 
 | 状态项 | 期望值 |
 | :--- | :--- |
-| 版本 | 当前上传版本，例如 `2.2.0` |
+| 版本 | 当前上传版本，例如 `2.2.0-pr1` |
 | 鉴权 | 已配置 |
 | 提交方式 | Base64 上传 |
 | 处理方式 | 注入为用户输入 |
@@ -274,58 +315,55 @@ inject_as_user_input = true
 > 该图描述的是插件可控链路。AstrBot 官方 `preprocess_stage`、其它插件、适配器私有缓存、容器卷映射和 NapCat 文件返回路径不完全受本插件控制。即使插件后段清理生效，官方前置 warning 或其它插件造成的残留仍可能出现。
 
 ```mermaid
-flowchart TB
-  classDef input fill:#f8fafc,stroke:#64748b,color:#0f172a
-  classDef plugin fill:#eff6ff,stroke:#2563eb,color:#172554
-  classDef guard fill:#fefce8,stroke:#ca8a04,color:#713f12
-  classDef external fill:#fff7ed,stroke:#ea580c,color:#7c2d12
-  classDef output fill:#ecfdf5,stroke:#059669,color:#064e3b
-  classDef risk fill:#fef2f2,stroke:#dc2626,color:#7f1d1d
+flowchart TD
+  subgraph input_layer["输入层"]
+    A["QQ / NapCat / OneBot Record"] --> B["AstrBot 消息事件"]
+    B --> C{"插件是否发现语音段"}
+  end
 
-  A["QQ / NapCat<br/>OneBot Record"] --> B["AstrBot 消息事件"]
-  B --> C{"插件能否发现语音段"}
-  C -- "否" --> R1["交还 AstrBot 原流程"]
-  C -- "是" --> D["VoiceInput<br/>记录 index、record、sources、event"]
-  D --> E{"来源类型"}
-  E -- "本地路径 / file URI" --> F["读取本地字节"]
-  E -- "HTTP URL" --> G["下载音频字节<br/>检查 Content-Length / max_audio_mb"]
-  E -- "OneBot 裸 file_id / xxx.amr" --> H["调用 get_record<br/>获取真实 URL / path / base64"]
-  E -- "base64 / data URI" --> I["解码音频字节"]
+  subgraph collect_layer["音频取得层"]
+    C -->|否| R1["交还 AstrBot 原流程"]
+    C -->|是| D["VoiceInput"]
+    D --> E{"来源类型"}
+    E -->|本地路径或 file URI| F["读取本地字节"]
+    E -->|HTTP URL| G["下载音频字节"]
+    E -->|OneBot file_id 或 amr 名称| H["调用 get_record"]
+    E -->|base64 或 data URI| I["解码音频字节"]
+    F --> J["AudioPayloadResult"]
+    G --> J
+    H --> J
+    I --> J
+  end
 
-  F --> J["AudioPayloadResult"]
-  G --> J
-  H --> J
-  I --> J
+  subgraph asr_layer["识别层"]
+    J --> K{"火山是否支持该格式"}
+    K -->|支持| L["构建 ASR payload"]
+    K -->|需要转码| M["ffmpeg 转为 WAV"]
+    M --> L
+    L --> N["Volcengine ASR"]
+    N --> O{"识别结果"}
+  end
 
-  J --> K{"火山是否支持该格式"}
-  K -- "WAV / MP3 / OGG / OPUS" --> L["直接构建 ASR payload"]
-  K -- "AMR / SILK / M4A / AAC / FLAC / WEBM" --> M["ffmpeg 转码<br/>默认输出 WAV"]
-  M --> L
+  subgraph inject_layer["注入与净化层"]
+    O -->|有效文本| P["VoiceInjectionPlan"]
+    O -->|静音或空结果| Q["请求用户重说"]
+    O -->|错误| R2["阻止旧 Record 继续传播"]
+    P --> S["替换消息为 Plain 文本"]
+    Q --> S
+    S --> T["清理 extras 与缓存"]
+    T --> U["构建干净 ProviderRequest"]
+  end
 
-  L --> N["Volcengine ASR<br/>flash recognize"]
-  N --> O{"识别结果"}
-  O -- "有效文本" --> P["VoiceInjectionPlan<br/>memory_text + llm_text + diagnostics"]
-  O -- "静音 / 空结果" --> Q["unclear voice plan<br/>自然请求用户重说"]
-  O -- "错误" --> R2["停止旧 Record 继续传播<br/>按配置提示用户"]
+  subgraph downstream_layer["后续消费层"]
+    U --> V{"enable_emotion_analysis"}
+    V -->|false| W["主 LLM 处理干净文本"]
+    V -->|true| X["情绪判断 LLM 生成语气参考"]
+    X --> W
+    W --> Y["AstrBot 后续流程"]
+  end
 
-  P --> S["替换 event.message / message_obj.message<br/>只保留 Plain 文本"]
-  Q --> S
-  S --> T["清理 extras / raw_message / cache / run_context"]
-  T --> U["构建干净 ProviderRequest"]
-  U --> V{"enable_emotion_analysis"}
-  V -- "false" --> W["主 LLM 继续处理干净文本"]
-  V -- "true" --> X["情绪判断 LLM<br/>生成受限语气参考"]
-  X --> W
-  W --> Y["AstrBot 后续流程<br/>LLM / 记忆 / TTS / 其它插件"]
-
-  B -. "官方 preprocess_stage 在插件 handler 之前" .-> R3["可能先出现 warning:<br/>not a valid file: xxx.amr"]
-
-  class A,B input
-  class D,J,L,M,P,Q,S,T,U plugin
-  class C,E,K,O,V guard
-  class N external
-  class W,Y output
-  class R1,R2,R3 risk
+  B -.-> R3["官方 preprocess_stage 早于插件 handler"]
+  R3 -.-> R4["可能先出现 not a valid file warning"]
 ```
 
 ### 五个核心对象
@@ -382,28 +420,18 @@ enable_emotion_analysis = false
 ### 工作流
 
 ```mermaid
-flowchart TB
-  classDef input fill:#f8fafc,stroke:#64748b,color:#0f172a
-  classDef emotion fill:#fdf2f8,stroke:#db2777,color:#831843
-  classDef guard fill:#fefce8,stroke:#ca8a04,color:#713f12
-  classDef output fill:#ecfdf5,stroke:#059669,color:#064e3b
-
+flowchart TD
   A["ASR 转写文本"] --> B{"enable_emotion_analysis"}
-  B -- "false" --> C["跳过情绪层<br/>直接生成干净用户输入"]
-  B -- "true" --> D["构造情绪判断 prompt<br/>转写文本 + 可用上下文"]
-  D --> E["Emotion LLM<br/>只能输出 JSON"]
+  B -->|false| C["跳过情绪层"]
+  B -->|true| D["构造情绪判断 prompt"]
+  D --> E["Emotion LLM 输出 JSON"]
   E --> F["JSON 解析与白名单校验"]
-  F --> G["label / emotion_weights<br/>confidence / valence / arousal"]
-  G --> H["EmotionWeightingPolicy<br/>计算 respect_weight"]
-  H --> I["生成 Tone Hint<br/>只作为主 LLM 语气参考"]
+  F --> G["提取 label 与 emotion_weights"]
+  G --> H["EmotionWeightingPolicy 计算 respect_weight"]
+  H --> I["生成 Tone Hint"]
   C --> J["主 LLM 处理用户语义"]
   I --> J
   J --> K["自然回复"]
-
-  class A input
-  class B,F guard
-  class D,E,G,H,I emotion
-  class C,J,K output
 ```
 
 ### 情绪算法并非凭空捏造
@@ -676,7 +704,7 @@ plugin.emotion_weighting_policy = MyEmotionWeightingPolicy()
 | `max_audio_mb` | int | `20` | 火山接口上限更高，但 QQ 语音通常不需要调大。 |
 | `enable_transcode` | bool | `true` | 建议开启。 |
 | `prefer_bundled_ffmpeg` | bool | `true` | Release zip + Linux x86_64 推荐开启。 |
-| `ffmpeg_path` | string | `auto` | 特殊环境可填 `/usr/bin/ffmpeg`。 |
+| `ffmpeg_path` | string | `auto` | 自动尝试环境变量、插件目录、imageio-ffmpeg、PATH 和常见系统路径；特殊环境可填 `/usr/bin/ffmpeg`。 |
 | `transcode_output_format` | string | `wav` | 兼容性优先用 `wav`。 |
 | `transcode_sample_rate` | int | `16000` | QQ 短语音够用。 |
 | `transcode_channels` | int | `1` | 单声道更稳定。 |
@@ -804,7 +832,7 @@ docker logs --tail=500 astrbot 2>&1 | grep -E 'preprocess_stage|agent_sub_stages
 
 先确认：
 
-1. 插件版本至少为 `2.2.0`。
+1. 插件版本至少为 `2.2.0-pr1`。
 2. 安装的是 Release 附件，不是旧 zip。
 3. 已重启 AstrBot。
 4. `/volc_asr_status` 显示版本正确。
@@ -835,12 +863,15 @@ docker logs --tail=500 astrbot 2>&1 | grep -E 'preprocess_stage|agent_sub_stages
 
 ### 提示需要 `ffmpeg`
 
+> [!WARNING]
+> 如果你没有在系统或容器里单独安装过 `ffmpeg`，请先确认自己安装的是 Release 附件 `astrbot_plugin_volcengine_asr.zip`。不要用 GitHub Source code zip 代替包体；否则插件可能找不到内置 `ffmpeg`，AMR/SILK 等语音就无法转码。
+
 按顺序检查：
 
 1. 是否使用 Release zip。
 2. 服务器是否为 Linux x86_64 / amd64。
 3. `prefer_bundled_ffmpeg` 是否为 `true`。
-4. `ffmpeg_path` 是否为 `auto` 或正确绝对路径。
+4. `ffmpeg_path` 是否为 `auto` 或正确绝对路径。`auto` 会自动尝试环境变量、插件目录、imageio-ffmpeg、PATH 和常见系统路径。
 5. `/volc_asr_status` 中 `ffmpeg状态` 是否可用。
 
 非 Linux x86_64 / amd64 环境建议：
@@ -1018,7 +1049,7 @@ Get-FileHash output/astrbot_plugin_volcengine_asr.zip -Algorithm SHA256
 | 本地迭代回归 | 95 项通过 |
 | 测试服安装 | 成功 |
 | 失败插件列表 | 空 |
-| `/volc_asr_status` | 返回 `2.2.0`，内置 ffmpeg 可用 |
+| `/volc_asr_status` | 返回 `2.2.0-pr1`，内置 ffmpeg 可用 |
 
 ### Web UI 接口预留
 
